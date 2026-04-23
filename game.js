@@ -58,12 +58,14 @@ const controls = { held: Object.create(null), pressed: Object.create(null) };
 const sel = { cursor: [0, 3], confirmed: [false, false], chosen: [-1, -1] };
 
 // ── AUDIO ──────────────────────────────────────────────────────
-let AC, MG;
+let AC, MG, BGMG;
 function initAudio() {
   if (AC) return;
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     MG = AC.createGain(); MG.gain.value = 0.25; MG.connect(AC.destination);
+    BGMG = AC.createGain(); BGMG.gain.value = 0.55; BGMG.connect(MG);
+    startBgm();
   } catch (_) {}
 }
 function tone(f, type, dur, vol, slide) {
@@ -116,12 +118,13 @@ function distCurve() {
 function gNote(freq, dur, vol, opts) {
   if (!AC) return;
   const now = AC.currentTime, o = opts || {}, t0 = now + (o.offset || 0);
+  const out = o.dest || MG;
   // Pick attack: short highpass noise burst
   if (o.pick !== false) {
     const p = AC.createBufferSource(), pf = AC.createBiquadFilter(), pg = AC.createGain();
     pf.type = 'highpass'; pf.frequency.value = 1800;
-    p.buffer = mkN(0.02); p.connect(pf); pf.connect(pg); pg.connect(MG);
-    pg.gain.setValueAtTime(0.18, t0);
+    p.buffer = mkN(0.02); p.connect(pf); pf.connect(pg); pg.connect(out);
+    pg.gain.setValueAtTime(o.pickVol || 0.18, t0);
     pg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.025);
     p.start(t0); p.stop(t0 + 0.03);
   }
@@ -150,7 +153,7 @@ function gNote(freq, dur, vol, opts) {
   g.gain.exponentialRampToValueAtTime(vol, t0 + 0.005);
   g.gain.linearRampToValueAtTime(vol * 0.85, t0 + dur * 0.7);
   g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-  osc.connect(preG); preG.connect(shaper); shaper.connect(mid); mid.connect(lp); lp.connect(g); g.connect(MG);
+  osc.connect(preG); preG.connect(shaper); shaper.connect(mid); mid.connect(lp); lp.connect(g); g.connect(out);
   osc.start(t0); osc.stop(t0 + dur + 0.02);
 }
 // Power chord: root + 5th (×1.498) + octave, each with its own pick
@@ -172,6 +175,62 @@ function sRiffMatch() {
   const notes = [110, 130.81, 146.83, 164.81, 196, 220];
   notes.forEach((f, i) => gNote(f, 0.11, 0.4, { offset: i * 0.07, tone: 3200 }));
   gNote(220, 0.55, 0.45, { offset: notes.length * 0.07 + 0.02, vib: 12, tone: 3200 });
+}
+
+// Phantom 2040-inspired BGM: cyberpunk industrial action music.
+// A minor progression Am-G-F-Em (i-VII-VI-v) = classic moody descending action.
+// Octave-slap bass driving 8ths + melodic lead arpeggios through each chord.
+// 4 bars at 128 BPM = ~7.5s loop.
+let BGM_ON = false;
+function startBgm() {
+  if (BGM_ON || !AC) return;
+  BGM_ON = true;
+  const bpm = 128, e8 = 60 / bpm / 2; // ~0.234s per 8th
+  // Bass: two octaves per chord for octave-slap alternation
+  const a1 = 55, g1 = 49, f1 = 43.65, e1 = 41.2;
+  const a2 = 110, g2 = 98, f2 = 87.31, e2 = 82.41;
+  // Lead register (rock guitar range)
+  const A3 = 220, B3 = 246.94, C4 = 261.63, D4 = 293.66, E4 = 329.63;
+  const F3 = 174.61, G3 = 196, E3 = 164.81;
+
+  // Bass: driving 8ths, root/octave alternation (classic cyberpunk bassline)
+  const bass = [
+    a1, a2, a1, a2, a1, a2, a1, a2,
+    g1, g2, g1, g2, g1, g2, g1, g2,
+    f1, f2, f1, f2, f1, f2, f1, f2,
+    e1, e2, e1, e2, e1, e2, e1, e2,
+  ];
+  // Lead: arpeggio through each chord, with melodic contour (climb → descent → F triad → Em climb back)
+  const lead = [
+    // Bar 1 Am — A-C-E ascending with D-E stinger resolution
+    A3, 0,  C4, 0,  E4, 0,  D4, E4,
+    // Bar 2 G — D-B-G descending (contrast to bar 1's ascent)
+    D4, 0,  B3, 0,  G3, 0,  G3, 0,
+    // Bar 3 F — F-A-C arpeggio up, down to F (F major brightness in the middle)
+    F3, 0,  A3, 0,  C4, 0,  A3, F3,
+    // Bar 4 Em — E-G-B-D climb (Em7 arpeggio builds tension back to Am loop)
+    E3, 0,  G3, 0,  B3, 0,  D4, 0,
+  ];
+  const loopDur = bass.length * e8;
+  const play = () => {
+    if (!BGM_ON) return;
+    bass.forEach((f, i) => {
+      if (f) gNote(f, e8 * 0.85, 0.32, { offset: 0.04 + i * e8, tone: 900, dest: BGMG, pickVol: 0.04 });
+    });
+    lead.forEach((f, i) => {
+      if (!f) return;
+      gNote(f, e8 * 1.3, 0.26, { offset: 0.04 + i * e8, tone: 2600, dest: BGMG, pickVol: 0.06 });
+    });
+    setTimeout(play, loopDur * 1000);
+  };
+  play();
+}
+function duckBgm(target, ms) {
+  if (!BGMG) return;
+  const now = AC.currentTime;
+  BGMG.gain.cancelScheduledValues(now);
+  BGMG.gain.setValueAtTime(BGMG.gain.value, now);
+  BGMG.gain.linearRampToValueAtTime(target, now + (ms || 120) / 1000);
 }
 
 // ── CAT DRAWINGS (centered at 0,0, facing RIGHT; wrapper handles direction) ──
@@ -760,7 +819,7 @@ function endByTime(f) {
   f.msg = 'TIME UP! ' + CATS[f.ci[w]].name + ' WINS!';
   f.msgT = 999;
   sRiffRound();
-  setTimeout(() => { f.over = true; sceneName = 'win'; winEnterT = T; drainPressed(); sRiffMatch(); }, 2200);
+  setTimeout(() => { f.over = true; sceneName = 'win'; winEnterT = T; drainPressed(); duckBgm(0.15, 100); sRiffMatch(); }, 2200);
 }
 
 function updateFight(f, dt) {
@@ -807,7 +866,7 @@ function endRound(f, winner) {
   if (f.rOver) return; f.rOver = true; f.F[winner].wins++;
   f.msg = CATS[f.ci[winner]].name + ' WINS!'; f.msgT = 999; sRiffRound();
   setTimeout(() => {
-    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice() }; sceneName = 'win'; winEnterT = T; drainPressed(); sRiffMatch(); }
+    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice() }; sceneName = 'win'; winEnterT = T; drainPressed(); duckBgm(0.15, 100); sRiffMatch(); }
     else { f.round++; resetRound(f); drainPressed(); }
   }, 2200);
 }
@@ -1005,10 +1064,10 @@ function handleInput() {
     if (T - winEnterT < 0.6) { drainPressed(); return; }
     if (consumePressed(['START1', 'START2', 'P1_1', 'P2_1'])) {
       fight = mkFight(winData.ci[0], winData.ci[1]);
-      fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound();
+      fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); duckBgm(0.55, 200);
     }
     if (consumePressed(['P1_D', 'P2_D'])) {
-      sel.confirmed = [false, false]; sel.chosen = [-1, -1]; sceneName = 'select';
+      sel.confirmed = [false, false]; sel.chosen = [-1, -1]; sceneName = 'select'; duckBgm(0.55, 200);
     }
     drainPressed();
   }
