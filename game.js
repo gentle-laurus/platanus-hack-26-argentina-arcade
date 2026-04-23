@@ -511,8 +511,8 @@ const CATS = [
   { name: 'FOURY', subtitle: 'THE OSCILLATOR', css: '#06b6d4', syncFreq: 4,
     initProj(b) {
       const w = Math.random();
-      b.f1 = 2 + Math.random() * (3 + w * 22); b.a1 = 15 + Math.random() * (25 + w * 110);
-      b.f2 = 4 + Math.random() * (3 + w * 14); b.a2 = Math.random() * (10 + w * 45);
+      b.f1 = 2 + Math.random() * (3 + w * 13); b.a1 = 15 + Math.random() * (20 + w * 80);
+      b.f2 = 3 + Math.random() * (2 + w * 10); b.a2 = Math.random() * (5 + w * 30);
       b.ph = Math.random() * Math.PI * 2;
       b.dist = 520 + Math.random() * 360;
       b.spd *= 0.5;
@@ -585,35 +585,27 @@ const CATS = [
       } o.stroke();
       o.globalAlpha = 1;
     } },
-  { name: 'FIBS', subtitle: 'THE GOLDEN MENACE', css: '#10b981', syncFreq: 5,
+  { name: 'FIBS', subtitle: 'THE GOLDEN MENACE', css: '#10b981', syncFreq: 5, orbit: true,
     initProj(b) {
-      b.r0 = 42 + Math.random() * 60;
-      b.omega = (1.5 + Math.random() * 5) * (Math.random() < 0.5 ? 1 : -1);
+      b.r0 = 22 + Math.random() * 110;
+      b.rMax = Math.min(320, b.r0 + 40 + Math.random() * 230);
+      b.omega = (7 + Math.random() * 12) * (Math.random() < 0.5 ? 1 : -1);
       b.ph0 = Math.random() * Math.PI * 2;
-      b.dist = 440 + Math.random() * 320;
-      b.growth = -12 + Math.random() * 55;
-      b.spd *= 0.55;
-    },
-    projPath(age, ox, oy, tx, ty, b) {
-      const dir = (b && b.dir) || ((tx - ox) >= 0 ? 1 : -1);
-      const dist = (b && b.dist) || 560;
-      const r0 = (b && b.r0) || 55, omega = (b && b.omega) || 3;
-      const ph0 = (b && b.ph0) || 0, growth = (b && b.growth) || 20;
-      const r = Math.max(8, r0 + growth * age);
-      const ang = ph0 + omega * age * Math.PI * 2;
-      return { x: ox + dir * dist * age + Math.cos(ang) * r, y: oy + Math.sin(ang) * r };
+      b.orbitT = 0; b.phase = 'orbit'; b.trail = [];
     },
     drawProj(b) {
-      ctx.strokeStyle = this.css; ctx.lineWidth = b.isPeak ? 3 : 2; ctx.globalAlpha = b.isPeak ? 0.55 : 0.4;
-      ctx.beginPath();
-      for (let i = 0; i <= 80; i++) { const a = b.age * i / 80, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
-      ctx.stroke();
-      ctx.strokeStyle = b.isPeak ? '#fff' : this.css; ctx.lineWidth = b.isPeak ? 4.5 : 3.5; ctx.globalAlpha = 0.95;
-      ctx.beginPath();
-      const s = Math.max(0, b.age - 0.06);
-      for (let i = 0; i <= 12; i++) { const a = s + (b.age - s) * i / 12, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
-      ctx.stroke();
-      ctx.fillStyle = this.css; ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 13 : 9, 0, Math.PI * 2); ctx.fill();
+      const tr = b.trail;
+      if (tr && tr.length > 1) {
+        ctx.strokeStyle = this.css; ctx.lineWidth = b.isPeak ? 3 : 2.2;
+        for (let i = 1; i < tr.length; i++) {
+          ctx.globalAlpha = (i / tr.length) * (b.isPeak ? 0.7 : 0.5);
+          ctx.beginPath(); ctx.moveTo(tr[i - 1].x, tr[i - 1].y); ctx.lineTo(tr[i].x, tr[i].y); ctx.stroke();
+        }
+      }
+      ctx.fillStyle = b.isPeak ? '#fff' : this.css; ctx.globalAlpha = 0.95;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 9 : 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = this.css; ctx.globalAlpha = 0.3;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 16 : 12, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     },
     bgDraw(T, a) {
@@ -899,24 +891,60 @@ function updateFight(f, dt) {
     fi.x = Math.max(40, Math.min(W - 40, fi.x));
     if (fi.state !== 'dead') fi.dir = fi.x < opp.x ? 1 : -1;
     fi.bullets = fi.bullets.filter(b => {
-      const prev = b.age; b.age += dt * b.spd; if (b.age >= 1) return false;
-      const p = C.projPath(b.age, b.ox, b.oy, b.tx, b.ty, b); b.x = p.x; b.y = p.y;
       let d = Infinity;
-      if (!b.hit) {
-        for (let s = 1; s <= 6; s++) {
-          const ta = prev + (b.age - prev) * s / 6;
-          const sp = C.projPath(ta, b.ox, b.oy, b.tx, b.ty, b);
-          const sd = Math.sqrt((sp.x - opp.x) ** 2 + (sp.y - (opp.y - 20)) ** 2);
-          if (sd < d) d = sd;
+      if (C.orbit) {
+        if (fi.state === 'dead') { fi.cd = 0.5; return false; }
+        if (b.phase === 'orbit') {
+          const prevT = b.orbitT; b.orbitT += dt;
+          if (b.orbitT >= 2) { fi.cd = 0.5; return false; }
+          const tt = b.orbitT / 2;
+          b.r = b.r0 + (b.rMax - b.r0) * tt;
+          b.ang = b.ph0 + b.omega * b.orbitT;
+          b.x = fi.x + Math.cos(b.ang) * b.r;
+          b.y = (fi.y - 20) + Math.sin(b.ang) * b.r;
+          if (!b.hit) {
+            for (let s = 1; s <= 8; s++) {
+              const tS = prevT + (b.orbitT - prevT) * s / 8;
+              const rS = b.r0 + (b.rMax - b.r0) * (tS / 2);
+              const aS = b.ph0 + b.omega * tS;
+              const xS = fi.x + Math.cos(aS) * rS, yS = (fi.y - 20) + Math.sin(aS) * rS;
+              const sd = Math.sqrt((xS - opp.x) ** 2 + (yS - (opp.y - 20)) ** 2);
+              if (sd < d) d = sd;
+            }
+          }
+        } else {
+          const px = b.x, py = b.y;
+          b.x += b.vx * dt * 60; b.y += b.vy * dt * 60;
+          if (b.x < -40 || b.x > W + 40 || b.y < -40 || b.y > H + 40) { fi.cd = 0.5; return false; }
+          if (!b.hit) {
+            for (let s = 1; s <= 4; s++) {
+              const xS = px + (b.x - px) * s / 4, yS = py + (b.y - py) * s / 4;
+              const sd = Math.sqrt((xS - opp.x) ** 2 + (yS - (opp.y - 20)) ** 2);
+              if (sd < d) d = sd;
+            }
+          }
+        }
+        b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 14) b.trail.shift();
+      } else {
+        const prev = b.age; b.age += dt * b.spd; if (b.age >= 1) return false;
+        const p = C.projPath(b.age, b.ox, b.oy, b.tx, b.ty, b); b.x = p.x; b.y = p.y;
+        if (!b.hit) {
+          for (let s = 1; s <= 6; s++) {
+            const ta = prev + (b.age - prev) * s / 6;
+            const sp = C.projPath(ta, b.ox, b.oy, b.tx, b.ty, b);
+            const sd = Math.sqrt((sp.x - opp.x) ** 2 + (sp.y - (opp.y - 20)) ** 2);
+            if (sd < d) d = sd;
+          }
         }
       }
-      if (d < 28 && !b.hit) {
+      if (d < (C.orbit ? 36 : 28) && !b.hit) {
         b.hit = true; opp.hp = Math.max(0, opp.hp - b.dmg);
         opp.state = 'hurt'; opp.stateT = 0.22; opp.hurtT = 0.22; opp.vy = -5;
         sHit(); f.flash = 0.07;
         for (let i = 0; i < 10; i++) { const a = Math.random() * Math.PI * 2, v = 2 + Math.random() * 5; f.parts.push({ x: opp.x, y: opp.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, col: C.css, life: 0.7, r: 4 }); }
         if (b.isPeak) { f.msg = 'PEAK HIT! ×2.5'; f.msgT = 1.2; sPeak(); }
         if (opp.hp <= 0) { opp.state = 'dead'; opp.vy = -8; endRound(f, pi); }
+        if (C.orbit) fi.cd = 0.5;
       }
       return !b.hit;
     });
@@ -1176,10 +1204,27 @@ function drainPressed() { for (const k in controls.pressed) controls.pressed[k] 
 
 function doSpecial(f, pi) {
   const fi = f.F[pi], opp = f.F[1 - pi];
-  if (fi.cd > 0 || fi.state === 'dead' || fi.state === 'hurt') return;
+  if (fi.state === 'dead' || fi.state === 'hurt') return;
+  const C = CATS[f.ci[pi]];
+  if (C.orbit) {
+    const ob = fi.bullets.find(b => b.phase === 'orbit');
+    if (ob) {
+      ob.phase = 'launch';
+      const dx = opp.x - ob.x, dy = (opp.y - 20) - ob.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+      ob.vx = dx / len * 14; ob.vy = dy / len * 14;
+      fi.state = 'attack'; fi.stateT = 0.16; sShoot(200 + pi * 120);
+      return;
+    }
+    if (fi.bullets.length > 0 || fi.cd > 0) return;
+    fi.state = 'attack'; fi.stateT = 0.16; sShoot(200 + pi * 120);
+    const isPeak = fi.sync > 0.82, dmg = Math.round(8 * (0.5 + fi.sync * 1.5));
+    const b = { x: fi.x, y: fi.y - 20, dir: fi.dir, dmg, hit: false, isPeak };
+    C.initProj(b); fi.bullets.push(b);
+    return;
+  }
+  if (fi.cd > 0) return;
   fi.cd = 0.5; fi.state = 'attack'; fi.stateT = 0.16; sShoot(200 + pi * 120);
   const isPeak = fi.sync > 0.82, dmg = Math.round(8 * (0.5 + fi.sync * 1.5));
-  const C = CATS[f.ci[pi]];
   const b = { ox: fi.x + fi.dir * 20, oy: fi.y - 20, tx: opp.x, ty: opp.y - 20, x: fi.x, y: fi.y - 20, dir: fi.dir, age: 0, spd: 1.6 + fi.sync * 0.6, dmg, hit: false, isPeak };
   if (C.initProj) C.initProj(b);
   fi.bullets.push(b);
