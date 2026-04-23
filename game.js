@@ -636,7 +636,7 @@ const CATS = [
       } o.stroke();
       o.globalAlpha = 1;
     } },
-  { name: 'SCHRÖDS', subtitle: 'THE UNDEFINED', css: '#e879f9', syncFreq: 3,
+  { name: 'SCHRÖDS', subtitle: 'THE UNDEFINED', css: '#e879f9', syncFreq: 3, teleport: true,
     projPath(age, ox, oy, tx, ty) {
       const dx = tx - ox, dy = ty - oy, len = Math.sqrt(dx * dx + dy * dy) || 1;
       const px = -dy / len, py = dx / len;
@@ -848,8 +848,8 @@ function mkFight(ci1, ci2) {
   return {
     ci: [ci1, ci2],
     F: [
-      { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, wins: 0 },
-      { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, wins: 0 },
+      { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: 0 },
+      { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: 0 },
     ],
     round: 1, over: false, rOver: false, _bc: 0,
     beatT: 0, beatMS: 475, beatF: 0,
@@ -885,7 +885,7 @@ function updateFight(f, dt) {
     const C = CATS[f.ci[pi]], opp = f.F[1 - pi];
     fi.phase += dt * C.syncFreq * 0.85; fi.sync = (Math.sin(fi.phase) + 1) / 2;
     if (fi.stateT > 0) { fi.stateT -= dt; if (fi.stateT <= 0 && fi.state !== 'dead') fi.state = fi.gnd ? 'idle' : 'jump'; }
-    if (fi.hurtT > 0) fi.hurtT -= dt; if (fi.cd > 0) fi.cd -= dt;
+    if (fi.hurtT > 0) fi.hurtT -= dt; if (fi.cd > 0) fi.cd -= dt; if (fi.invuln > 0) fi.invuln -= dt; if (fi.dashT > 0) fi.dashT -= dt;
     fi.vy += 0.65 * dt * 60; fi.y += fi.vy * dt * 60;
     if (fi.y >= FLOOR - 28) { fi.y = FLOOR - 28; fi.vy = 0; fi.gnd = true; fi.jumps = 0; } else fi.gnd = false;
     fi.x = Math.max(40, Math.min(W - 40, fi.x));
@@ -937,7 +937,7 @@ function updateFight(f, dt) {
           }
         }
       }
-      if (d < (C.orbit ? 36 : 28) && !b.hit) {
+      if (d < (C.orbit ? 36 : 28) && !b.hit && opp.invuln <= 0) {
         b.hit = true; opp.hp = Math.max(0, opp.hp - b.dmg);
         opp.state = 'hurt'; opp.stateT = 0.22; opp.hurtT = 0.22; opp.vy = -5;
         sHit(); f.flash = 0.07;
@@ -971,8 +971,8 @@ function endRound(f, winner) {
 function resetRound(f) {
   const w = [f.F[0].wins, f.F[1].wins];
   f.F = [
-    { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, wins: w[0] },
-    { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, wins: w[1] },
+    { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: w[0] },
+    { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: w[1] },
   ];
   f.rOver = false; f.parts = []; f.flash = 0; f.msg = 'ROUND ' + f.round; f.msgT = 1.2;
   f.suddenDeath = false; f.timer = 180; f.timeUp = false;
@@ -983,7 +983,12 @@ function drawFight(f) {
   drawBG(T, f.ci[0], f.ci[1], f.beatF);
   drawFloor(T, f.ci[0], f.ci[1]);
   if (f.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${f.flash * 5})`; ctx.fillRect(0, 0, W, H); }
-  F.forEach((fi, pi) => { if (fi.state === 'dead' && fi.y > H + 80) return; drawCat(fi.x, fi.y, fi.dir, f.ci[pi], T, fi.state, fi.hurtT, 1, fi.sync); });
+  F.forEach((fi, pi) => {
+    if (fi.state === 'dead' && fi.y > H + 80) return;
+    if (fi.invuln > 0) ctx.globalAlpha = 0.35 + 0.45 * Math.abs(Math.sin(T * 40));
+    drawCat(fi.x, fi.y, fi.dir, f.ci[pi], T, fi.state, fi.hurtT, 1, fi.sync);
+    ctx.globalAlpha = 1;
+  });
   F.forEach((fi, pi) => {
     const C = CATS[f.ci[pi]];
     fi.bullets.forEach(b => {
@@ -1169,8 +1174,9 @@ function handleInput() {
       ];
       for (let pi = 0; pi < 2; pi++) {
         const me = fight.F[pi], other = fight.F[1 - pi];
-        if (!mv[pi]) continue;
-        me.x += mv[pi];
+        const dx = me.dashT > 0 ? me.dashVx : mv[pi];
+        if (!dx) continue;
+        me.x += dx;
         if (me.state !== 'dead' && other.state !== 'dead') {
           const gap = Math.abs(me.x - other.x);
           if (gap < minD) other.x += (me.x <= other.x ? 1 : -1) * (minD - gap);
@@ -1206,6 +1212,21 @@ function doSpecial(f, pi) {
   const fi = f.F[pi], opp = f.F[1 - pi];
   if (fi.state === 'dead' || fi.state === 'hurt') return;
   const C = CATS[f.ci[pi]];
+  if (C.teleport) {
+    if (fi.cd > 0) return;
+    for (let i = 0; i < 14; i++) { const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 3; f.parts.push({ x: fi.x, y: fi.y - 20, vx: Math.cos(a) * v, vy: Math.sin(a) * v, col: C.css, life: 0.5, r: 3 }); }
+    const crossLeft = fi.x >= opp.x;
+    const minX = crossLeft ? 45 : Math.min(W - 65, opp.x + 80);
+    const maxX = crossLeft ? Math.max(minX + 20, opp.x - 80) : W - 45;
+    fi.x = minX + Math.random() * (maxX - minX);
+    fi.y = 50 + Math.random() * (H / 2 - 50);
+    fi.vy = 0; fi.jumps = 0; fi.gnd = false;
+    fi.invuln = 0.25; fi.cd = 0.65;
+    fi.dashT = 0.5; fi.dashVx = opp.x > fi.x ? 6 : -6;
+    for (let i = 0; i < 14; i++) { const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 3; f.parts.push({ x: fi.x, y: fi.y - 20, vx: Math.cos(a) * v, vy: Math.sin(a) * v, col: C.css, life: 0.5, r: 3 }); }
+    tone(300 + Math.random() * 500, 'sine', 0.05, 0.12, 80 + Math.random() * 400);
+    return;
+  }
   if (C.orbit) {
     const ob = fi.bullets.find(b => b.phase === 'orbit');
     if (ob) {
@@ -1234,7 +1255,7 @@ function doScratch(f, pi) {
   if (fi.cd > 0 || fi.state === 'dead' || fi.state === 'hurt') return;
   fi.cd = 0.18; fi.state = 'attack'; fi.stateT = 0.14;
   tone(620 + pi * 40, 'square', 0.04, 0.09, 920);
-  if (Math.abs(opp.x - fi.x) < 85 && Math.abs(opp.y - fi.y) < 55 && opp.state !== 'dead') {
+  if (Math.abs(opp.x - fi.x) < 85 && Math.abs(opp.y - fi.y) < 55 && opp.state !== 'dead' && opp.invuln <= 0) {
     opp.hp = Math.max(0, opp.hp - 5);
     opp.state = 'hurt'; opp.stateT = 0.2; opp.hurtT = 0.2; opp.vy = -3;
     sHit(); f.flash = 0.04;
