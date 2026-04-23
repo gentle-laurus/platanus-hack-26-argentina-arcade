@@ -58,14 +58,12 @@ const controls = { held: Object.create(null), pressed: Object.create(null) };
 const sel = { cursor: [0, 3], confirmed: [false, false], chosen: [-1, -1] };
 
 // ── AUDIO ──────────────────────────────────────────────────────
-let AC, MG, BGMG;
+let AC, MG;
 function initAudio() {
   if (AC) return;
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     MG = AC.createGain(); MG.gain.value = 0.25; MG.connect(AC.destination);
-    BGMG = AC.createGain(); BGMG.gain.value = 0.55; BGMG.connect(MG);
-    startBgm();
   } catch (_) {}
 }
 function tone(f, type, dur, vol, slide) {
@@ -139,7 +137,7 @@ function gNote(freq, dur, vol, opts) {
     lfo.start(t0); lfo.stop(t0 + dur + 0.02);
   }
   // Pre-gain to push into the clipper
-  const preG = AC.createGain(); preG.gain.value = 4;
+  const preG = AC.createGain(); preG.gain.value = o.drive || 4;
   const shaper = AC.createWaveShaper();
   shaper.curve = distCurve(); shaper.oversample = '2x';
   // Tone: lowpass + slight midrange bandpass for that "cocked wah" rock tone
@@ -163,74 +161,87 @@ function pChord(root, dur, vol, opts) {
   gNote(root * 2, dur, vol * 0.5, opts);
 }
 
-// Round win riff: 3 palm-muted chugs + open power chord (CHUG-CHUG-SLAM)
+// Round win: ascending A-minor-pentatonic bell flourish. Same FM-bell timbre as the
+// battle ambient so the round-win statement feels like the ambient "gathering" into a phrase.
 function sRiffRound() {
   if (!AC) return;
-  for (let i = 0; i < 3; i++) gNote(82.41, 0.1, 0.42, { offset: i * 0.12, tone: 1400 });
-  pChord(82.41, 0.6, 0.4, { offset: 0.38, tone: 3000 });
+  bellNote(440,    0.22, 1.2, 0);       // A4
+  bellNote(523.25, 0.24, 1.2, 0.09);    // C5
+  bellNote(659.25, 0.26, 1.2, 0.18);    // E5
+  bellNote(880,    0.32, 3.8, 0.3);     // A5 — sustained climax
+  bellNote(440,    0.14, 3.8, 0.3);     // A4 octave-below layer for body
 }
-// Match win riff: ascending A minor pentatonic lick + sustained A3 with vibrato
+// Match win: cursed bell toll. Descending tritone pairs (A ↔ Eb = diabolus in
+// musica) ending on a sustained low cluster of A + Eb = unresolved dread.
+// Same FM-bell timbre as the ambient, but the tritone intervals turn it malevolent.
 function sRiffMatch() {
   if (!AC) return;
-  const notes = [110, 130.81, 146.83, 164.81, 196, 220];
-  notes.forEach((f, i) => gNote(f, 0.11, 0.4, { offset: i * 0.07, tone: 3200 }));
-  gNote(220, 0.55, 0.45, { offset: notes.length * 0.07 + 0.02, vib: 12, tone: 3200 });
+  bellNote(880,    0.26, 2.2, 0);     // A5
+  bellNote(622.25, 0.23, 2.2, 0.15);  // Eb5 (tritone below A5)
+  bellNote(440,    0.26, 2.2, 0.35);  // A4
+  bellNote(311.13, 0.23, 2.5, 0.5);   // Eb4 (tritone below A4)
+  bellNote(220,    0.30, 5.5, 0.85);  // A3 — low toll foundation
+  bellNote(155.56, 0.24, 5.5, 0.85);  // Eb3 — tritone bass (THE evil note)
+  bellNote(110,    0.28, 6.0, 0.85);  // A2 — seismic octave
 }
 
-// Phantom 2040-inspired BGM: cyberpunk industrial action music.
-// A minor progression Am-G-F-Em (i-VII-VI-v) = classic moody descending action.
-// Octave-slap bass driving 8ths + melodic lead arpeggios through each chord.
-// 4 bars at 128 BPM = ~7.5s loop.
-let BGM_ON = false;
-function startBgm() {
-  if (BGM_ON || !AC) return;
-  BGM_ON = true;
-  const bpm = 128, e8 = 60 / bpm / 2; // ~0.234s per 8th
-  // Bass: two octaves per chord for octave-slap alternation
-  const a1 = 55, g1 = 49, f1 = 43.65, e1 = 41.2;
-  const a2 = 110, g2 = 98, f2 = 87.31, e2 = 82.41;
-  // Lead register (rock guitar range)
-  const A3 = 220, B3 = 246.94, C4 = 261.63, D4 = 293.66, E4 = 329.63;
-  const F3 = 174.61, G3 = 196, E3 = 164.81;
+// ── BATTLE AMBIENT ──
+// Sparse FM-bell phrases from A minor pentatonic, routed through a feedback-delay
+// reverb bus for long shimmer tails. Only plays during the fight scene.
+let AMBG, REV_IN, currentAmb = null;
+function ensureAmbBus() { if (!AMBG) { AMBG = AC.createGain(); AMBG.gain.value = 0.5; AMBG.connect(MG); } }
+function ensureReverb() {
+  if (REV_IN) return;
+  const d1 = AC.createDelay(1.5); d1.delayTime.value = 0.37;
+  const d2 = AC.createDelay(1.5); d2.delayTime.value = 0.23;
+  const fb1 = AC.createGain(); fb1.gain.value = 0.55;
+  const fb2 = AC.createGain(); fb2.gain.value = 0.5;
+  const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+  const wet = AC.createGain(); wet.gain.value = 0.55;
+  REV_IN = AC.createGain();
+  REV_IN.connect(d1); REV_IN.connect(d2);
+  d1.connect(fb1); fb1.connect(lp); lp.connect(d1);
+  d2.connect(fb2); fb2.connect(d2);
+  d1.connect(wet); d2.connect(wet); wet.connect(AMBG);
+}
+// FM bell: sine carrier + inharmonic sine modulator (2.76:1 ratio) for metallic timbre.
+// Modulation index decays exponentially so the attack is bright and the tail softens.
+function bellNote(freq, vol, life, offset) {
+  if (!AC) return;
+  ensureAmbBus(); ensureReverb();
+  const t0 = AC.currentTime + (offset || 0);
+  const car = AC.createOscillator(); car.type = 'sine'; car.frequency.value = freq;
+  const mod = AC.createOscillator(); mod.type = 'sine'; mod.frequency.value = freq * 2.76;
+  const modG = AC.createGain();
+  modG.gain.setValueAtTime(freq * 3.5, t0);
+  modG.gain.exponentialRampToValueAtTime(freq * 0.25, t0 + life);
+  mod.connect(modG); modG.connect(car.frequency);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.06);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + life);
+  car.connect(g); g.connect(AMBG); g.connect(REV_IN);
+  car.start(t0); mod.start(t0);
+  car.stop(t0 + life + 0.1); mod.stop(t0 + life + 0.1);
+}
 
-  // Bass: driving 8ths, root/octave alternation (classic cyberpunk bassline)
-  const bass = [
-    a1, a2, a1, a2, a1, a2, a1, a2,
-    g1, g2, g1, g2, g1, g2, g1, g2,
-    f1, f2, f1, f2, f1, f2, f1, f2,
-    e1, e2, e1, e2, e1, e2, e1, e2,
-  ];
-  // Lead: arpeggio through each chord, with melodic contour (climb → descent → F triad → Em climb back)
-  const lead = [
-    // Bar 1 Am — A-C-E ascending with D-E stinger resolution
-    A3, 0,  C4, 0,  E4, 0,  D4, E4,
-    // Bar 2 G — D-B-G descending (contrast to bar 1's ascent)
-    D4, 0,  B3, 0,  G3, 0,  G3, 0,
-    // Bar 3 F — F-A-C arpeggio up, down to F (F major brightness in the middle)
-    F3, 0,  A3, 0,  C4, 0,  A3, F3,
-    // Bar 4 Em — E-G-B-D climb (Em7 arpeggio builds tension back to Am loop)
-    E3, 0,  G3, 0,  B3, 0,  D4, 0,
-  ];
-  const loopDur = bass.length * e8;
-  const play = () => {
-    if (!BGM_ON) return;
-    bass.forEach((f, i) => {
-      if (f) gNote(f, e8 * 0.85, 0.32, { offset: 0.04 + i * e8, tone: 900, dest: BGMG, pickVol: 0.04 });
-    });
-    lead.forEach((f, i) => {
-      if (!f) return;
-      gNote(f, e8 * 1.3, 0.26, { offset: 0.04 + i * e8, tone: 2600, dest: BGMG, pickVol: 0.06 });
-    });
-    setTimeout(play, loopDur * 1000);
+function ambBells() {
+  const notes = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25, 783.99];
+  let timer, stopped = false;
+  const playBell = () => {
+    if (stopped) return;
+    bellNote(notes[Math.floor(Math.random() * notes.length)], 0.11, 3.5, 0);
+    timer = setTimeout(playBell, 1600 + Math.random() * 3200);
   };
-  play();
+  timer = setTimeout(playBell, 600);
+  return { stop() { stopped = true; clearTimeout(timer); } };
 }
-function duckBgm(target, ms) {
-  if (!BGMG) return;
-  const now = AC.currentTime;
-  BGMG.gain.cancelScheduledValues(now);
-  BGMG.gain.setValueAtTime(BGMG.gain.value, now);
-  BGMG.gain.linearRampToValueAtTime(target, now + (ms || 120) / 1000);
+function startBattleAmb() {
+  if (!AC || currentAmb) return;
+  currentAmb = ambBells();
+}
+function stopBattleAmb() {
+  if (currentAmb) { currentAmb.stop(); currentAmb = null; }
 }
 
 // ── CAT DRAWINGS (centered at 0,0, facing RIGHT; wrapper handles direction) ──
@@ -497,7 +508,7 @@ function pawDraw(px, py, fill, glow, gcol, glyph, font, gx, gy, al) {
 
 // ── CATS ───────────────────────────────────────────────────────
 const CATS = [
-  { name: 'FOURY', subtitle: 'THE WAVEFORM', css: '#06b6d4', syncFreq: 4,
+  { name: 'FOURY', subtitle: 'THE OSCILLATOR', css: '#06b6d4', syncFreq: 4,
     projPath(age, ox, oy, tx, ty) {
       const dx = tx - ox, dy = ty - oy, len = Math.sqrt(dx * dx + dy * dy) || 1;
       const px = -dy / len, py = dx / len;
@@ -520,7 +531,7 @@ const CATS = [
       for (let i = 0; i <= 150; i++) { const t = i / 150 * Math.PI * 2 * 3 + T * 0.12; o.lineTo(cx + W * 0.46 * Math.sin(aa * t + delta), cy + H * 0.38 * Math.sin(b * t)); }
       o.stroke(); o.globalAlpha = 1;
     } },
-  { name: 'GAUSSY', subtitle: 'THE BELL CURVE', css: '#fb923c', syncFreq: 2,
+  { name: 'GAUSSY', subtitle: 'THE MEAN ONE', css: '#fb923c', syncFreq: 2,
     projPath(age, ox, oy, tx, ty) {
       const dx = tx - ox, dy = ty - oy, len = Math.sqrt(dx * dx + dy * dy) || 1;
       const px = -dy / len, py = dx / len;
@@ -550,7 +561,7 @@ const CATS = [
       } o.stroke();
       o.globalAlpha = 1;
     } },
-  { name: 'FIBS', subtitle: 'THE GOLDEN SPIRAL', css: '#10b981', syncFreq: 5,
+  { name: 'FIBS', subtitle: 'THE GOLDEN MENACE', css: '#10b981', syncFreq: 5,
     projPath(age, ox, oy, tx, ty) {
       const dx = tx - ox, dy = ty - oy;
       const baseAngle = Math.atan2(dy, dx);
@@ -565,26 +576,28 @@ const CATS = [
     },
     _r(o, T, h) {
       const n = 5, d = 97, cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.47;
+      const STEPS = 180;
       for (let layer = 0; layer < 5; layer++) {
         const off = layer * 0.45 + T * (0.045 - layer * 0.007);
         o.strokeStyle = `hsl(${h},${80 + layer * 4}%,${45 + layer * 8}%)`; o.globalAlpha = 0.15 + layer * 0.1; o.lineWidth = 0.9 + layer * 0.4;
         o.beginPath();
-        for (let k = 0; k <= 360; k++) {
-          const angle = (k * d) * Math.PI / 180 + off;
+        for (let k = 0; k <= STEPS; k++) {
+          const angle = (k * d * 2) * Math.PI / 180 + off;
           const r = R * Math.sin((n + layer * 0.15) * angle);
           k === 0 ? o.moveTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle)) : o.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
         } o.stroke();
       }
-      const tStep = (T * 35) % 360;
+      const tStep = (T * 17) % STEPS;
       o.strokeStyle = `hsl(${h},100%,85%)`; o.globalAlpha = 0.9; o.lineWidth = 2.5;
       o.beginPath();
-      for (let k = Math.floor(tStep); k <= Math.floor(tStep) + 100; k++) {
-        const angle = (k * d) * Math.PI / 180, r = R * Math.sin(n * angle);
-        k === Math.floor(tStep) ? o.moveTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle)) : o.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+      const tStart = Math.floor(tStep);
+      for (let k = tStart; k <= tStart + 50; k++) {
+        const angle = (k * d * 2) * Math.PI / 180, r = R * Math.sin(n * angle);
+        k === tStart ? o.moveTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle)) : o.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
       } o.stroke();
       o.globalAlpha = 1;
     } },
-  { name: 'SCHRÖDS', subtitle: 'THE WAVE FUNCTION', css: '#e879f9', syncFreq: 3,
+  { name: 'SCHRÖDS', subtitle: 'THE UNDEFINED', css: '#e879f9', syncFreq: 3,
     projPath(age, ox, oy, tx, ty) {
       const dx = tx - ox, dy = ty - oy, len = Math.sqrt(dx * dx + dy * dy) || 1;
       const px = -dy / len, py = dx / len;
@@ -691,8 +704,6 @@ function drawFloor(T, ci1, ci2) {
   ctx.beginPath();
   for (let x = 0; x <= W; x += 3) ctx.lineTo(x, FLOOR + noise(x, T * 0.8 + 20));
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1; ctx.globalAlpha = 1;
-  for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, FLOOR + 12); ctx.lineTo(x, H); ctx.stroke(); }
   ctx.globalAlpha = 1;
 }
 
@@ -786,8 +797,11 @@ function drawSelect() {
     ctx.globalAlpha = 1;
   });
 
-  ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.22)';
-  ctx.fillText('P1: A / D  ·  U confirm          P2: ← / →  ·  R confirm', W / 2, H - 14);
+  ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#b00020';
+  ctx.textAlign = 'left';
+  ctx.fillText('P1: A / D  ·  U confirm', 16, H - 14);
+  ctx.textAlign = 'right';
+  ctx.fillText('P2: ← / →  ·  R confirm', W - 16, H - 14);
 }
 
 // ── FIGHT ───────────────────────────────────────────────────────
@@ -819,7 +833,7 @@ function endByTime(f) {
   f.msg = 'TIME UP! ' + CATS[f.ci[w]].name + ' WINS!';
   f.msgT = 999;
   sRiffRound();
-  setTimeout(() => { f.over = true; sceneName = 'win'; winEnterT = T; drainPressed(); duckBgm(0.15, 100); sRiffMatch(); }, 2200);
+  setTimeout(() => { f.over = true; sceneName = 'win'; winEnterT = T; drainPressed(); stopBattleAmb(); sRiffMatch(); }, 2200);
 }
 
 function updateFight(f, dt) {
@@ -866,7 +880,7 @@ function endRound(f, winner) {
   if (f.rOver) return; f.rOver = true; f.F[winner].wins++;
   f.msg = CATS[f.ci[winner]].name + ' WINS!'; f.msgT = 999; sRiffRound();
   setTimeout(() => {
-    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice() }; sceneName = 'win'; winEnterT = T; drainPressed(); duckBgm(0.15, 100); sRiffMatch(); }
+    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice() }; sceneName = 'win'; winEnterT = T; drainPressed(); stopBattleAmb(); sRiffMatch(); }
     else { f.round++; resetRound(f); drainPressed(); }
   }, 2200);
 }
@@ -971,8 +985,11 @@ function drawWin() {
   ctx.strokeStyle = '#000'; ctx.lineWidth = 9; ctx.strokeText(C.name + ' WINS!', W / 2, H / 2 - 80);
   ctx.fillStyle = '#b00020'; ctx.fillText(C.name + ' WINS!', W / 2, H / 2 - 80);
   ctx.font = '16px monospace'; ctx.fillStyle = '#fff'; ctx.fillText(C.subtitle, W / 2, H / 2 - 50);
-  ctx.font = '11px monospace'; ctx.fillStyle = Math.sin(T * 5) > 0 ? '#fff' : '#334155';
-  ctx.fillText('START / BUTTON 1: REMATCH     DOWN: SELECT', W / 2, H / 2 + 20);
+  ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#b00020';
+  ctx.textAlign = 'left';
+  ctx.fillText('START / BUTTON 1: REMATCH', 16, H - 14);
+  ctx.textAlign = 'right';
+  ctx.fillText('DOWN: SELECT', W - 16, H - 14);
 }
 
 // ── INPUT ───────────────────────────────────────────────────────
@@ -1005,12 +1022,21 @@ function onKey(e, down) {
   }
 }
 
+// Move cursor in direction `dir` (+1 right, -1 left), skipping the card currently
+// held by the other player (cursor or confirmed — both live on sel.cursor[other]).
+function advanceCursor(pi, dir) {
+  const other = 1 - pi;
+  let next = (sel.cursor[pi] + dir + 4) % 4;
+  if (next === sel.cursor[other]) next = (next + dir + 4) % 4;
+  return next;
+}
+
 function handleInput() {
   if (sceneName === 'select') {
     // P1 cursor
     if (!sel.confirmed[0]) {
-      if (consumePressed(['P1_L'])) { sel.cursor[0] = (sel.cursor[0] + 3) % 4; sSelect(); }
-      if (consumePressed(['P1_R'])) { sel.cursor[0] = (sel.cursor[0] + 1) % 4; sSelect(); }
+      if (consumePressed(['P1_L'])) { sel.cursor[0] = advanceCursor(0, -1); sSelect(); }
+      if (consumePressed(['P1_R'])) { sel.cursor[0] = advanceCursor(0, 1); sSelect(); }
     }
     // P1 confirm/unconfirm
     if (consumePressed(['P1_1'])) {
@@ -1022,8 +1048,8 @@ function handleInput() {
     }
     // P2 cursor
     if (!sel.confirmed[1]) {
-      if (consumePressed(['P2_L'])) { sel.cursor[1] = (sel.cursor[1] + 3) % 4; sSelect(); }
-      if (consumePressed(['P2_R'])) { sel.cursor[1] = (sel.cursor[1] + 1) % 4; sSelect(); }
+      if (consumePressed(['P2_L'])) { sel.cursor[1] = advanceCursor(1, -1); sSelect(); }
+      if (consumePressed(['P2_R'])) { sel.cursor[1] = advanceCursor(1, 1); sSelect(); }
     }
     // P2 confirm/unconfirm
     if (consumePressed(['P2_1'])) {
@@ -1035,7 +1061,7 @@ function handleInput() {
     }
     if (sel.confirmed[0] && sel.confirmed[1]) {
       const a = sel.chosen[0], b = sel.chosen[1];
-      setTimeout(() => { fight = mkFight(a, b); fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); }, 400);
+      setTimeout(() => { fight = mkFight(a, b); fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); startBattleAmb(); }, 400);
       // prevent re-trigger
       sel.confirmed[0] = sel.confirmed[1] = false;
       sel.chosen[0] = sel.chosen[1] = -1;
@@ -1064,10 +1090,10 @@ function handleInput() {
     if (T - winEnterT < 0.6) { drainPressed(); return; }
     if (consumePressed(['START1', 'START2', 'P1_1', 'P2_1'])) {
       fight = mkFight(winData.ci[0], winData.ci[1]);
-      fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); duckBgm(0.55, 200);
+      fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); startBattleAmb();
     }
     if (consumePressed(['P1_D', 'P2_D'])) {
-      sel.confirmed = [false, false]; sel.chosen = [-1, -1]; sceneName = 'select'; duckBgm(0.55, 200);
+      sel.confirmed = [false, false]; sel.chosen = [-1, -1]; sceneName = 'select';
     }
     drainPressed();
   }
