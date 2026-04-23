@@ -867,8 +867,12 @@ function updateFight(f, dt) {
     });
   });
   const F = f.F;
-  if (Math.abs(F[0].x - F[1].x) < 52 && F[0].state !== 'dead' && F[1].state !== 'dead') {
-    const push = F[0].x < F[1].x ? -1.8 : 1.8; F[0].x += push; F[1].x -= push;
+  if (F[0].state !== 'dead' && F[1].state !== 'dead') {
+    const dx = F[1].x - F[0].x, minD = 52;
+    if (Math.abs(dx) < minD) {
+      const sign = dx >= 0 ? 1 : -1, over = minD - Math.abs(dx);
+      F[0].x -= sign * over / 2; F[1].x += sign * over / 2;
+    }
   }
   f.parts = f.parts.filter(p => { p.x += p.vx * dt * 60; p.y += p.vy * dt * 60; p.vy += 0.14 * dt * 60; p.life -= dt * 1.8; return p.life > 0; });
 }
@@ -1074,11 +1078,20 @@ function handleInput() {
 
   if (sceneName === 'fight' && fight) {
     if (!fight.rOver) {
-      const spd = 5;
-      if (isHeld('P1_L')) fight.F[0].x -= spd;
-      if (isHeld('P1_R')) fight.F[0].x += spd;
-      if (isHeld('P2_L')) fight.F[1].x -= spd;
-      if (isHeld('P2_R')) fight.F[1].x += spd;
+      const spd = 5, minD = 52;
+      const mv = [
+        (isHeld('P1_R') ? spd : 0) - (isHeld('P1_L') ? spd : 0),
+        (isHeld('P2_R') ? spd : 0) - (isHeld('P2_L') ? spd : 0),
+      ];
+      for (let pi = 0; pi < 2; pi++) {
+        const me = fight.F[pi], other = fight.F[1 - pi];
+        if (!mv[pi]) continue;
+        me.x += mv[pi];
+        if (me.state !== 'dead' && other.state !== 'dead') {
+          const gap = Math.abs(me.x - other.x);
+          if (gap < minD) other.x += (me.x <= other.x ? 1 : -1) * (minD - gap);
+        }
+      }
       if (consumePressed(['P1_U'])) doJump(fight, 0);
       if (consumePressed(['P1_1'])) doScratch(fight, 0);
       if (consumePressed(['P1_2'])) doSpecial(fight, 0);
