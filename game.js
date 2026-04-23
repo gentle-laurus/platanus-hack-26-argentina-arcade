@@ -509,11 +509,35 @@ function pawDraw(px, py, fill, glow, gcol, glyph, font, gx, gy, al) {
 // ── CATS ───────────────────────────────────────────────────────
 const CATS = [
   { name: 'FOURY', subtitle: 'THE OSCILLATOR', css: '#06b6d4', syncFreq: 4,
-    projPath(age, ox, oy, tx, ty) {
-      const dx = tx - ox, dy = ty - oy, len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const px = -dy / len, py = dx / len;
-      const w = (Math.sin(age * Math.PI * 8) * 0.5 + Math.sin(age * Math.PI * 4) * 0.3 + Math.sin(age * Math.PI * 2) * 0.2) * 38 * (1 - age);
-      return { x: ox + dx * age + px * w, y: oy + dy * age + py * w };
+    initProj(b) {
+      const w = Math.random();
+      b.f1 = 2 + Math.random() * (3 + w * 22); b.a1 = 15 + Math.random() * (25 + w * 110);
+      b.f2 = 4 + Math.random() * (3 + w * 14); b.a2 = Math.random() * (10 + w * 45);
+      b.ph = Math.random() * Math.PI * 2;
+      b.dist = 520 + Math.random() * 360;
+      b.spd *= 0.5;
+    },
+    projPath(age, ox, oy, tx, ty, b) {
+      const dir = (b && b.dir) || ((tx - ox) >= 0 ? 1 : -1);
+      const dist = (b && b.dist) || 620;
+      const f1 = (b && b.f1) || 4, a1 = (b && b.a1) || 38;
+      const f2 = (b && b.f2) || 0, a2 = (b && b.a2) || 0;
+      const ph = (b && b.ph) || 0;
+      const y = Math.sin(age * Math.PI * 2 * f1 + ph) * a1 + Math.sin(age * Math.PI * 2 * f2) * a2;
+      return { x: ox + dir * dist * age, y: oy + y };
+    },
+    drawProj(b) {
+      ctx.strokeStyle = this.css; ctx.lineWidth = b.isPeak ? 3 : 2; ctx.globalAlpha = b.isPeak ? 0.55 : 0.4;
+      ctx.beginPath();
+      for (let i = 0; i <= 60; i++) { const a = b.age * i / 60, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+      ctx.stroke();
+      ctx.strokeStyle = b.isPeak ? '#fff' : this.css; ctx.lineWidth = b.isPeak ? 4.5 : 3.5; ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      const s = Math.max(0, b.age - 0.08);
+      for (let i = 0; i <= 12; i++) { const a = s + (b.age - s) * i / 12, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+      ctx.stroke();
+      ctx.fillStyle = this.css; ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 13 : 9, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
     },
     bgDraw(T, a) { const h = ((T * 20) % 360).toFixed(0); ctx.globalAlpha = a; this._r(ctx, T, h); ctx.globalAlpha = 1; },
     _r(o, T, h) {
@@ -853,7 +877,7 @@ function updateFight(f, dt) {
     if (fi.state !== 'dead') fi.dir = fi.x < opp.x ? 1 : -1;
     fi.bullets = fi.bullets.filter(b => {
       b.age += dt * b.spd; if (b.age >= 1) return false;
-      const p = C.projPath(b.age, b.ox, b.oy, b.tx, b.ty); b.x = p.x; b.y = p.y;
+      const p = C.projPath(b.age, b.ox, b.oy, b.tx, b.ty, b); b.x = p.x; b.y = p.y;
       const d = Math.sqrt((b.x - opp.x) ** 2 + (b.y - (opp.y - 20)) ** 2);
       if (d < 28 && !b.hit) {
         b.hit = true; opp.hp = Math.max(0, opp.hp - b.dmg);
@@ -904,9 +928,10 @@ function drawFight(f) {
   F.forEach((fi, pi) => {
     const C = CATS[f.ci[pi]];
     fi.bullets.forEach(b => {
+      if (C.drawProj) { C.drawProj(b); return; }
       for (let tr = 1; tr <= 8; tr++) {
         const ta = Math.max(0.001, b.age - tr * 0.035);
-        const tp = C.projPath(ta, b.ox, b.oy, b.tx, b.ty);
+        const tp = C.projPath(ta, b.ox, b.oy, b.tx, b.ty, b);
         ctx.fillStyle = C.css; ctx.globalAlpha = (8 - tr) / 8 * (b.isPeak ? 0.45 : 0.2);
         ctx.beginPath(); ctx.arc(tp.x, tp.y, (b.isPeak ? 10 : 7) * (8 - tr) / 8 + 1, 0, Math.PI * 2); ctx.fill();
       }
@@ -1123,7 +1148,10 @@ function doSpecial(f, pi) {
   if (fi.cd > 0 || fi.state === 'dead' || fi.state === 'hurt') return;
   fi.cd = 0.5; fi.state = 'attack'; fi.stateT = 0.16; sShoot(200 + pi * 120);
   const isPeak = fi.sync > 0.82, dmg = Math.round(8 * (0.5 + fi.sync * 1.5));
-  fi.bullets.push({ ox: fi.x + fi.dir * 20, oy: fi.y - 20, tx: opp.x, ty: opp.y - 20, x: fi.x, y: fi.y - 20, age: 0, spd: 1.6 + fi.sync * 0.6, dmg, hit: false, isPeak });
+  const C = CATS[f.ci[pi]];
+  const b = { ox: fi.x + fi.dir * 20, oy: fi.y - 20, tx: opp.x, ty: opp.y - 20, x: fi.x, y: fi.y - 20, dir: fi.dir, age: 0, spd: 1.6 + fi.sync * 0.6, dmg, hit: false, isPeak };
+  if (C.initProj) C.initProj(b);
+  fi.bullets.push(b);
 }
 function doScratch(f, pi) {
   const fi = f.F[pi], opp = f.F[1 - pi];
