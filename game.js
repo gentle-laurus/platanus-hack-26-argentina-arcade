@@ -815,29 +815,26 @@ function mkFight(ci1, ci2) {
     round: 1, over: false, rOver: false, _bc: 0,
     beatT: 0, beatMS: 475, beatF: 0,
     parts: [], flash: 0, msg: '', msgT: 0,
-    timer: 180, timeUp: false,
+    timer: 180, timeUp: false, suddenDeath: false,
   };
 }
 
 function endByTime(f) {
   if (f.rOver) return;
-  f.rOver = true; f.timeUp = true;
   const [a, b] = f.F;
-  let w;
-  if (a.wins > b.wins) w = 0;
-  else if (b.wins > a.wins) w = 1;
-  else if (a.hp > b.hp) w = 0;
-  else if (b.hp > a.hp) w = 1;
-  else w = 0;
-  winData = { winner: w, ci: f.ci.slice() };
-  f.msg = 'TIME UP! ' + CATS[f.ci[w]].name + ' WINS!';
-  f.msgT = 999;
-  sRiffRound();
-  setTimeout(() => { f.over = true; sceneName = 'win'; winEnterT = T; drainPressed(); stopBattleAmb(); sRiffMatch(); }, 2200);
+  if (!f.suddenDeath && a.hp === b.hp) {
+    f.suddenDeath = true;
+    a.hp = 1; b.hp = 1;
+    f.msg = 'SUDDEN DEATH!'; f.msgT = 2.5;
+    sRiffRound();
+    return;
+  }
+  f.timeUp = true;
+  endRound(f, a.hp > b.hp ? 0 : 1);
 }
 
 function updateFight(f, dt) {
-  if (!f.rOver) {
+  if (!f.rOver && !f.suddenDeath) {
     f.timer -= dt;
     if (f.timer <= 0) { f.timer = 0; endByTime(f); return; }
   }
@@ -891,6 +888,7 @@ function resetRound(f) {
     { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, wins: w[1] },
   ];
   f.rOver = false; f.parts = []; f.flash = 0; f.msg = 'ROUND ' + f.round; f.msgT = 1.2;
+  f.suddenDeath = false; f.timer = 180; f.timeUp = false;
 }
 
 function drawFight(f) {
@@ -942,8 +940,8 @@ function drawFight(f) {
   const tLeft = Math.max(0, f.timer);
   const mm = Math.floor(tLeft / 60);
   const ss = Math.floor(tLeft % 60);
-  const timeStr = mm + ':' + (ss < 10 ? '0' : '') + ss;
-  const urgent = tLeft <= 10;
+  const timeStr = f.suddenDeath ? 'SUDDEN DEATH' : mm + ':' + (ss < 10 ? '0' : '') + ss;
+  const urgent = f.suddenDeath || tLeft <= 10;
   const warning = tLeft <= 30;
   ctx.textAlign = 'center';
   ctx.font = 'bold 22px monospace';
