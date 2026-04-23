@@ -1080,9 +1080,11 @@ function handleInput() {
       if (isHeld('P2_L')) fight.F[1].x -= spd;
       if (isHeld('P2_R')) fight.F[1].x += spd;
       if (consumePressed(['P1_U'])) doJump(fight, 0);
-      if (consumePressed(['P1_1'])) doAttack(fight, 0);
+      if (consumePressed(['P1_1'])) doScratch(fight, 0);
+      if (consumePressed(['P1_2'])) doSpecial(fight, 0);
       if (consumePressed(['P2_U'])) doJump(fight, 1);
-      if (consumePressed(['P2_1'])) doAttack(fight, 1);
+      if (consumePressed(['P2_1'])) doScratch(fight, 1);
+      if (consumePressed(['P2_2'])) doSpecial(fight, 1);
     }
     drainPressed();
     return;
@@ -1103,12 +1105,29 @@ function handleInput() {
 
 function drainPressed() { for (const k in controls.pressed) controls.pressed[k] = false; }
 
-function doAttack(f, pi) {
+function doSpecial(f, pi) {
   const fi = f.F[pi], opp = f.F[1 - pi];
   if (fi.cd > 0 || fi.state === 'dead' || fi.state === 'hurt') return;
-  fi.cd = 0.25; fi.state = 'attack'; fi.stateT = 0.16; sShoot(200 + pi * 120);
+  fi.cd = 0.5; fi.state = 'attack'; fi.stateT = 0.16; sShoot(200 + pi * 120);
   const isPeak = fi.sync > 0.82, dmg = Math.round(8 * (0.5 + fi.sync * 1.5));
   fi.bullets.push({ ox: fi.x + fi.dir * 20, oy: fi.y - 20, tx: opp.x, ty: opp.y - 20, x: fi.x, y: fi.y - 20, age: 0, spd: 1.6 + fi.sync * 0.6, dmg, hit: false, isPeak });
+}
+function doScratch(f, pi) {
+  const fi = f.F[pi], opp = f.F[1 - pi];
+  if (fi.cd > 0 || fi.state === 'dead' || fi.state === 'hurt') return;
+  fi.cd = 0.18; fi.state = 'attack'; fi.stateT = 0.14;
+  tone(620 + pi * 40, 'square', 0.04, 0.09, 920);
+  if (Math.abs(opp.x - fi.x) < 85 && Math.abs(opp.y - fi.y) < 55 && opp.state !== 'dead') {
+    opp.hp = Math.max(0, opp.hp - 5);
+    opp.state = 'hurt'; opp.stateT = 0.2; opp.hurtT = 0.2; opp.vy = -3;
+    sHit(); f.flash = 0.04;
+    const C = CATS[f.ci[pi]];
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 2.5;
+      f.parts.push({ x: opp.x, y: opp.y - 20, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 1, col: C.css, life: 0.45, r: 2.5 });
+    }
+    if (opp.hp <= 0) { opp.state = 'dead'; opp.vy = -8; endRound(f, pi); }
+  }
 }
 function doJump(f, pi) {
   const fi = f.F[pi]; if (fi.state === 'dead' || fi.jumps >= 2) return;
