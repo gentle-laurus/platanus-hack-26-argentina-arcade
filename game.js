@@ -586,12 +586,35 @@ const CATS = [
       o.globalAlpha = 1;
     } },
   { name: 'FIBS', subtitle: 'THE GOLDEN MENACE', css: '#10b981', syncFreq: 5,
-    projPath(age, ox, oy, tx, ty) {
-      const dx = tx - ox, dy = ty - oy;
-      const baseAngle = Math.atan2(dy, dx);
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const wobble = Math.sin(age * 1.618 * Math.PI * 3) * 26 * (1 - age) * (1 - age);
-      return { x: ox + Math.cos(baseAngle) * dist * age + Math.cos(baseAngle + Math.PI / 2) * wobble, y: oy + Math.sin(baseAngle) * dist * age + Math.sin(baseAngle + Math.PI / 2) * wobble };
+    initProj(b) {
+      b.r0 = 42 + Math.random() * 60;
+      b.omega = (1.5 + Math.random() * 5) * (Math.random() < 0.5 ? 1 : -1);
+      b.ph0 = Math.random() * Math.PI * 2;
+      b.dist = 440 + Math.random() * 320;
+      b.growth = -12 + Math.random() * 55;
+      b.spd *= 0.55;
+    },
+    projPath(age, ox, oy, tx, ty, b) {
+      const dir = (b && b.dir) || ((tx - ox) >= 0 ? 1 : -1);
+      const dist = (b && b.dist) || 560;
+      const r0 = (b && b.r0) || 55, omega = (b && b.omega) || 3;
+      const ph0 = (b && b.ph0) || 0, growth = (b && b.growth) || 20;
+      const r = Math.max(8, r0 + growth * age);
+      const ang = ph0 + omega * age * Math.PI * 2;
+      return { x: ox + dir * dist * age + Math.cos(ang) * r, y: oy + Math.sin(ang) * r };
+    },
+    drawProj(b) {
+      ctx.strokeStyle = this.css; ctx.lineWidth = b.isPeak ? 3 : 2; ctx.globalAlpha = b.isPeak ? 0.55 : 0.4;
+      ctx.beginPath();
+      for (let i = 0; i <= 80; i++) { const a = b.age * i / 80, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+      ctx.stroke();
+      ctx.strokeStyle = b.isPeak ? '#fff' : this.css; ctx.lineWidth = b.isPeak ? 4.5 : 3.5; ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      const s = Math.max(0, b.age - 0.06);
+      for (let i = 0; i <= 12; i++) { const a = s + (b.age - s) * i / 12, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+      ctx.stroke();
+      ctx.fillStyle = this.css; ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 13 : 9, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
     },
     bgDraw(T, a) {
       if (!this._oc) { this._oc = document.createElement('canvas'); this._oc.width = W; this._oc.height = H; this._ot = -99; }
