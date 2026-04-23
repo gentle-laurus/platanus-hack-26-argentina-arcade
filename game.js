@@ -969,9 +969,6 @@ function drawFight(f) {
     ctx.fillStyle = f.msg.includes('PEAK') ? '#fff' : '#b00020';
     ctx.fillText(f.msg, W / 2, H / 2 - 20); ctx.globalAlpha = 1;
   }
-  ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#1e293b';
-  ctx.fillText('P1: A/D move  W jump  U shoot', 10, H - 6);
-  ctx.textAlign = 'right'; ctx.fillText('P2: arrows  ↑ jump  R shoot', W - 10, H - 6);
 }
 
 // ── WIN ─────────────────────────────────────────────────────────
@@ -1059,12 +1056,19 @@ function handleInput() {
         else { sel.confirmed[1] = true; sel.chosen[1] = sel.cursor[1]; sConfirm(); sMeow(480); }
       }
     }
-    if (sel.confirmed[0] && sel.confirmed[1]) {
+    if (sel.confirmed[0] && sel.confirmed[1] && !sel.transitioning) {
+      // Hold both confirmed selections on screen for a second so player 2's
+      // label/card is visible before the fight starts. `transitioning` guards
+      // re-trigger without clearing the visual state mid-countdown.
+      sel.transitioning = true;
       const a = sel.chosen[0], b = sel.chosen[1];
-      setTimeout(() => { fight = mkFight(a, b); fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); startBattleAmb(); }, 400);
-      // prevent re-trigger
-      sel.confirmed[0] = sel.confirmed[1] = false;
-      sel.chosen[0] = sel.chosen[1] = -1;
+      setTimeout(() => {
+        fight = mkFight(a, b); fight.msg = 'ROUND 1'; fight.msgT = 1.2;
+        sceneName = 'fight'; sRound(); startBattleAmb();
+        sel.confirmed[0] = sel.confirmed[1] = false;
+        sel.chosen[0] = sel.chosen[1] = -1;
+        sel.transitioning = false;
+      }, 650);
     }
     drainPressed();
     return;
