@@ -899,9 +899,17 @@ function updateFight(f, dt) {
     fi.x = Math.max(40, Math.min(W - 40, fi.x));
     if (fi.state !== 'dead') fi.dir = fi.x < opp.x ? 1 : -1;
     fi.bullets = fi.bullets.filter(b => {
-      b.age += dt * b.spd; if (b.age >= 1) return false;
+      const prev = b.age; b.age += dt * b.spd; if (b.age >= 1) return false;
       const p = C.projPath(b.age, b.ox, b.oy, b.tx, b.ty, b); b.x = p.x; b.y = p.y;
-      const d = Math.sqrt((b.x - opp.x) ** 2 + (b.y - (opp.y - 20)) ** 2);
+      let d = Infinity;
+      if (!b.hit) {
+        for (let s = 1; s <= 6; s++) {
+          const ta = prev + (b.age - prev) * s / 6;
+          const sp = C.projPath(ta, b.ox, b.oy, b.tx, b.ty, b);
+          const sd = Math.sqrt((sp.x - opp.x) ** 2 + (sp.y - (opp.y - 20)) ** 2);
+          if (sd < d) d = sd;
+        }
+      }
       if (d < 28 && !b.hit) {
         b.hit = true; opp.hp = Math.max(0, opp.hp - b.dmg);
         opp.state = 'hurt'; opp.stateT = 0.22; opp.hurtT = 0.22; opp.vy = -5;
