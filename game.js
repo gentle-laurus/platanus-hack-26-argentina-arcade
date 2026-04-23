@@ -53,6 +53,7 @@ let T = 0;
 let sceneName = 'select';
 let fight = null;
 let winData = { winner: 0, ci: [0, 1] };
+let winEnterT = 0;
 const controls = { held: Object.create(null), pressed: Object.create(null) };
 const sel = { cursor: [0, 3], confirmed: [false, false], chosen: [-1, -1] };
 
@@ -96,6 +97,82 @@ const sMeow = (p) => tone(p || 380, 'sawtooth', 0.18, 0.12, p ? p * 0.65 : 250);
 const sHit = () => { nFX(700, 0.09, 0.25); tone(100, 'sine', 0.08, 0.18); };
 const sPeak = () => tone(880, 'sine', 0.1, 0.16, 1400);
 const sRound = () => { tone(220, 'square', 0.08, 0.2); setTimeout(() => tone(440, 'square', 0.12, 0.2), 100); setTimeout(() => tone(660, 'sine', 0.18, 0.22), 200); };
+
+// ── ELECTRIC GUITAR RIFF SYNTH ──
+// Saw oscillator → WaveShaper (soft-clip distortion) → lowpass tone → envelope.
+// Pick attack = brief filtered noise burst. Power chord = 3 stacked notes (root+5th+octave).
+let DIST_CURVE;
+function distCurve() {
+  if (DIST_CURVE) return DIST_CURVE;
+  const n = 512, c = new Float32Array(n), k = 55;
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    c[i] = ((3 + k) * x * 20 * Math.PI / 180) / (Math.PI + k * Math.abs(x));
+  }
+  DIST_CURVE = c;
+  return DIST_CURVE;
+}
+// Single distorted guitar note
+function gNote(freq, dur, vol, opts) {
+  if (!AC) return;
+  const now = AC.currentTime, o = opts || {}, t0 = now + (o.offset || 0);
+  // Pick attack: short highpass noise burst
+  if (o.pick !== false) {
+    const p = AC.createBufferSource(), pf = AC.createBiquadFilter(), pg = AC.createGain();
+    pf.type = 'highpass'; pf.frequency.value = 1800;
+    p.buffer = mkN(0.02); p.connect(pf); pf.connect(pg); pg.connect(MG);
+    pg.gain.setValueAtTime(0.18, t0);
+    pg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.025);
+    p.start(t0); p.stop(t0 + 0.03);
+  }
+  const osc = AC.createOscillator();
+  osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, t0);
+  if (o.bend) osc.frequency.linearRampToValueAtTime(o.bend, t0 + (o.bendT || dur * 0.5));
+  if (o.vib) {
+    const lfo = AC.createOscillator(), lg = AC.createGain();
+    lfo.frequency.value = 5.5; lg.gain.setValueAtTime(0, t0);
+    lg.gain.linearRampToValueAtTime(o.vib, t0 + dur * 0.25);
+    lfo.connect(lg); lg.connect(osc.frequency);
+    lfo.start(t0); lfo.stop(t0 + dur + 0.02);
+  }
+  // Pre-gain to push into the clipper
+  const preG = AC.createGain(); preG.gain.value = 4;
+  const shaper = AC.createWaveShaper();
+  shaper.curve = distCurve(); shaper.oversample = '2x';
+  // Tone: lowpass + slight midrange bandpass for that "cocked wah" rock tone
+  const lp = AC.createBiquadFilter(); lp.type = 'lowpass';
+  lp.frequency.value = o.tone || 2800; lp.Q.value = 0.7;
+  const mid = AC.createBiquadFilter(); mid.type = 'peaking';
+  mid.frequency.value = 1100; mid.Q.value = 1.2; mid.gain.value = 6;
+  // Amp env
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.005);
+  g.gain.linearRampToValueAtTime(vol * 0.85, t0 + dur * 0.7);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(preG); preG.connect(shaper); shaper.connect(mid); mid.connect(lp); lp.connect(g); g.connect(MG);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+// Power chord: root + 5th (×1.498) + octave, each with its own pick
+function pChord(root, dur, vol, opts) {
+  gNote(root, dur, vol * 0.75, opts);
+  gNote(root * 1.498, dur, vol * 0.65, opts);
+  gNote(root * 2, dur, vol * 0.5, opts);
+}
+
+// Round win riff: 3 palm-muted chugs + open power chord (CHUG-CHUG-SLAM)
+function sRiffRound() {
+  if (!AC) return;
+  for (let i = 0; i < 3; i++) gNote(82.41, 0.1, 0.42, { offset: i * 0.12, tone: 1400 });
+  pChord(82.41, 0.6, 0.4, { offset: 0.38, tone: 3000 });
+}
+// Match win riff: ascending A minor pentatonic lick + sustained A3 with vibrato
+function sRiffMatch() {
+  if (!AC) return;
+  const notes = [110, 130.81, 146.83, 164.81, 196, 220];
+  notes.forEach((f, i) => gNote(f, 0.11, 0.4, { offset: i * 0.07, tone: 3200 }));
+  gNote(220, 0.55, 0.45, { offset: notes.length * 0.07 + 0.02, vib: 12, tone: 3200 });
+}
 
 // ── CAT DRAWINGS (centered at 0,0, facing RIGHT; wrapper handles direction) ──
 
@@ -682,8 +759,8 @@ function endByTime(f) {
   winData = { winner: w, ci: f.ci.slice() };
   f.msg = 'TIME UP! ' + CATS[f.ci[w]].name + ' WINS!';
   f.msgT = 999;
-  sRound();
-  setTimeout(() => { f.over = true; sceneName = 'win'; }, 2200);
+  sRiffRound();
+  setTimeout(() => { f.over = true; sceneName = 'win'; winEnterT = T; drainPressed(); sRiffMatch(); }, 2200);
 }
 
 function updateFight(f, dt) {
@@ -728,10 +805,10 @@ function updateFight(f, dt) {
 
 function endRound(f, winner) {
   if (f.rOver) return; f.rOver = true; f.F[winner].wins++;
-  f.msg = CATS[f.ci[winner]].name + ' WINS!'; f.msgT = 999; sRound();
+  f.msg = CATS[f.ci[winner]].name + ' WINS!'; f.msgT = 999; sRiffRound();
   setTimeout(() => {
-    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice() }; sceneName = 'win'; }
-    else { f.round++; resetRound(f); }
+    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice() }; sceneName = 'win'; winEnterT = T; drainPressed(); sRiffMatch(); }
+    else { f.round++; resetRound(f); drainPressed(); }
   }, 2200);
 }
 function resetRound(f) {
@@ -816,7 +893,7 @@ function drawFight(f) {
     ctx.globalAlpha = Math.min(f.msgT, 0.4) / 0.4;
     ctx.font = 'bold 46px monospace'; ctx.textAlign = 'center';
     ctx.strokeStyle = '#000'; ctx.lineWidth = 8; ctx.strokeText(f.msg, W / 2, H / 2 - 20);
-    ctx.fillStyle = f.msg.includes('PEAK') ? '#fff' : CATS[f.ci[F[0].wins >= F[1].wins ? 0 : 1]].css;
+    ctx.fillStyle = f.msg.includes('PEAK') ? '#fff' : '#b00020';
     ctx.fillText(f.msg, W / 2, H / 2 - 20); ctx.globalAlpha = 1;
   }
   ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#1e293b';
@@ -833,7 +910,7 @@ function drawWin() {
   drawCat(W / 2, FLOOR - 28, 1, winData.ci[winData.winner], T, 'idle', 0, 1.6, 0.9);
   ctx.textAlign = 'center'; ctx.font = 'bold 50px monospace';
   ctx.strokeStyle = '#000'; ctx.lineWidth = 9; ctx.strokeText(C.name + ' WINS!', W / 2, H / 2 - 80);
-  ctx.fillStyle = C.css; ctx.fillText(C.name + ' WINS!', W / 2, H / 2 - 80);
+  ctx.fillStyle = '#b00020'; ctx.fillText(C.name + ' WINS!', W / 2, H / 2 - 80);
   ctx.font = '16px monospace'; ctx.fillStyle = '#fff'; ctx.fillText(C.subtitle, W / 2, H / 2 - 50);
   ctx.font = '11px monospace'; ctx.fillStyle = Math.sin(T * 5) > 0 ? '#fff' : '#334155';
   ctx.fillText('START / BUTTON 1: REMATCH     DOWN: SELECT', W / 2, H / 2 + 20);
@@ -908,21 +985,24 @@ function handleInput() {
     return;
   }
 
-  if (sceneName === 'fight' && fight && !fight.rOver) {
-    const spd = 5;
-    if (isHeld('P1_L')) fight.F[0].x -= spd;
-    if (isHeld('P1_R')) fight.F[0].x += spd;
-    if (isHeld('P2_L')) fight.F[1].x -= spd;
-    if (isHeld('P2_R')) fight.F[1].x += spd;
-    if (consumePressed(['P1_U'])) doJump(fight, 0);
-    if (consumePressed(['P1_1'])) doAttack(fight, 0);
-    if (consumePressed(['P2_U'])) doJump(fight, 1);
-    if (consumePressed(['P2_1'])) doAttack(fight, 1);
+  if (sceneName === 'fight' && fight) {
+    if (!fight.rOver) {
+      const spd = 5;
+      if (isHeld('P1_L')) fight.F[0].x -= spd;
+      if (isHeld('P1_R')) fight.F[0].x += spd;
+      if (isHeld('P2_L')) fight.F[1].x -= spd;
+      if (isHeld('P2_R')) fight.F[1].x += spd;
+      if (consumePressed(['P1_U'])) doJump(fight, 0);
+      if (consumePressed(['P1_1'])) doAttack(fight, 0);
+      if (consumePressed(['P2_U'])) doJump(fight, 1);
+      if (consumePressed(['P2_1'])) doAttack(fight, 1);
+    }
     drainPressed();
     return;
   }
 
   if (sceneName === 'win') {
+    if (T - winEnterT < 0.6) { drainPressed(); return; }
     if (consumePressed(['START1', 'START2', 'P1_1', 'P2_1'])) {
       fight = mkFight(winData.ci[0], winData.ci[1]);
       fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound();
