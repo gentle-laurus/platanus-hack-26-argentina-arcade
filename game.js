@@ -581,17 +581,17 @@ const CATS = [
         grad.addColorStop(0, 'rgba(168,85,247,0.42)'); grad.addColorStop(0.55, 'rgba(168,85,247,0.14)'); grad.addColorStop(1, 'rgba(168,85,247,0)');
         ctx.fillStyle = grad; ctx.globalAlpha = life;
         ctx.beginPath(); ctx.arc(b.x, b.y, 180, 0, Math.PI * 2); ctx.fill();
-        for (let arm = 0; arm < 3; arm++) {
+        for (let arm = 0; arm < 2; arm++) {
           ctx.strokeStyle = '#c084fc'; ctx.globalAlpha = 0.5 * life; ctx.lineWidth = 2.2;
           ctx.beginPath();
-          for (let i = 0; i <= 50; i++) {
-            const pp = i / 50, rr = 34 + pp * 130, ang = arm * Math.PI * 2 / 3 + T * 2.5 + pp * Math.PI * 3;
+          for (let i = 0; i <= 24; i++) {
+            const pp = i / 24, rr = 34 + pp * 130, ang = arm * Math.PI + T * 2.5 + pp * Math.PI * 3;
             const x = b.x + Math.cos(ang) * rr, y = b.y + Math.sin(ang) * rr;
             i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
           }
           ctx.stroke();
         }
-        for (let i = 0; i < 14; i++) {
+        for (let i = 0; i < 8; i++) {
           const ph = (T * 0.45 + i * 0.13) % 1, rr = 170 * (1 - ph), ang = T * 2.2 + i * 0.7 + ph * Math.PI * 3;
           ctx.fillStyle = '#e9d5ff'; ctx.globalAlpha = Math.min(1, ph * 3) * (1 - ph * 0.55) * life;
           ctx.beginPath(); ctx.arc(b.x + Math.cos(ang) * rr, b.y + Math.sin(ang) * rr, 2.2 + ph * 1.2, 0, Math.PI * 2); ctx.fill();
@@ -1034,9 +1034,15 @@ function updateFight(f, dt) {
         }
       }
       if (oppWell) {
-        const wdx = oppWell.x - (b.x + wx), wdy = oppWell.y - (b.y + wy), wd = Math.sqrt(wdx * wdx + wdy * wdy);
-        if (wd < 180 && wd > 0.5) {
-          const wp = (1 - wd / 180) * 2.8 * dt * 60;
+        const bx = b.x + wx, by = b.y + wy;
+        const wdx = oppWell.x - bx, wdy = oppWell.y - by, wd = Math.sqrt(wdx * wdx + wdy * wdy);
+        if (wd < 34) {
+          for (let i = 0; i < 8; i++) { const a = Math.random() * Math.PI * 2, v = 1 + Math.random() * 2; f.parts.push({ x: bx, y: by, vx: Math.cos(a) * v, vy: Math.sin(a) * v, col: '#c084fc', life: 0.35, r: 2 }); }
+          tone(120, 'sine', 0.04, 0.14, 60);
+          return false;
+        }
+        if (wd < 280 && wd > 0.5) {
+          const wp = (1 - wd / 280) * 14 * dt * 60;
           b.wellDx = wx + (wdx / wd) * wp;
           b.wellDy = wy + (wdy / wd) * wp;
         }
@@ -1207,11 +1213,23 @@ function drawWin() {
   ctx.strokeStyle = '#000'; ctx.lineWidth = 9; ctx.strokeText(C.name + ' WINS!', W / 2, H / 2 - 80);
   ctx.fillStyle = '#b00020'; ctx.fillText(C.name + ' WINS!', W / 2, H / 2 - 80);
   ctx.font = '16px monospace'; ctx.fillStyle = '#fff'; ctx.fillText(C.subtitle, W / 2, H / 2 - 50);
-  ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#b00020';
-  ctx.textAlign = 'left';
-  ctx.fillText('START / BUTTON 1 (U / R): REMATCH', 16, H - 14);
-  ctx.textAlign = 'right';
-  ctx.fillText('BUTTON 2 (I / T): SELECT', W - 16, H - 14);
+  const boxW = 230, boxH = 38, boxY = H - 52;
+  const opts = [
+    { x: 24, label: 'REMATCH', keys: 'START / B1 (ENTER · U · R)', col: '#10b981' },
+    { x: W - 24 - boxW, label: 'BACK TO MENU', keys: 'BUTTON 2 (I · T)', col: '#a5f3fc' },
+  ];
+  opts.forEach(o => {
+    ctx.fillStyle = 'rgba(8,0,24,0.78)';
+    ctx.beginPath(); ctx.roundRect(o.x, boxY, boxW, boxH, 8); ctx.fill();
+    ctx.strokeStyle = o.col; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.roundRect(o.x, boxY, boxW, boxH, 8); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 13px monospace'; ctx.fillStyle = o.col;
+    ctx.fillText(o.label, o.x + boxW / 2, boxY + 15);
+    ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText(o.keys, o.x + boxW / 2, boxY + 30);
+  });
 }
 
 // ── INPUT ───────────────────────────────────────────────────────
