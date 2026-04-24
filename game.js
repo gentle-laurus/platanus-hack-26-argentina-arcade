@@ -34,8 +34,9 @@ function boot() {
     handleInput();
     if (sceneName === 'select') drawSelect();
     else if (sceneName === 'fight' && fight) {
-      if (!fight.rOver) updateFight(fight, ds);
+      if (!fight.rOver && !fight.paused) updateFight(fight, ds);
       drawFight(fight);
+      if (fight.paused) drawPause();
     } else if (sceneName === 'win') drawWin();
     requestAnimationFrame(loop);
   }
@@ -881,11 +882,45 @@ function drawSelect() {
     ctx.globalAlpha = 1;
   });
 
-  ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#b00020';
-  ctx.textAlign = 'left';
-  ctx.fillText('P1: A / D  ·  U confirm', 16, H - 14);
-  ctx.textAlign = 'right';
-  ctx.fillText('P2: ← / →  ·  R confirm', W - 16, H - 14);
+  const legend = [
+    ['MOVE', 'A  D', '← →'],
+    ['JUMP', 'W', '↑'],
+    ['CROUCH', 'S', '↓'],
+    ['SCRATCH', 'U', 'R'],
+    ['SPECIAL', 'I', 'T'],
+    ['START / PAUSE', 'ENTER', '2'],
+  ];
+  const lgW = 560, lgH = 168, lgX = (W - lgW) / 2, lgY = 425;
+  ctx.fillStyle = 'rgba(8,0,24,0.78)';
+  ctx.beginPath(); ctx.roundRect(lgX, lgY, lgW, lgH, 12); ctx.fill();
+  ctx.strokeStyle = 'rgba(232,121,249,0.35)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(lgX, lgY, lgW, lgH, 12); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 12;
+  ctx.font = 'bold 14px monospace'; ctx.fillStyle = '#e879f9';
+  ctx.fillText('CONTROLS', W / 2, lgY + 22);
+  ctx.shadowBlur = 0;
+  const colA = lgX + 36, colP1 = lgX + 260, colP2 = lgX + 420;
+  ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff9de2'; ctx.fillText('P1', colP1 + 28, lgY + 44);
+  ctx.fillStyle = '#a5f3fc'; ctx.fillText('P2', colP2 + 28, lgY + 44);
+  ctx.strokeStyle = 'rgba(232,121,249,0.15)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(lgX + 20, lgY + 52); ctx.lineTo(lgX + lgW - 20, lgY + 52); ctx.stroke();
+  ctx.font = '13px monospace';
+  legend.forEach((r, i) => {
+    const y = lgY + 74 + i * 16;
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillText(r[0], colA, y);
+    ctx.textAlign = 'center';
+    const w1 = ctx.measureText(r[1]).width + 14;
+    ctx.fillStyle = 'rgba(255,157,226,0.16)';
+    ctx.beginPath(); ctx.roundRect(colP1 + 28 - w1 / 2, y - 12, w1, 16, 4); ctx.fill();
+    ctx.fillStyle = '#ff9de2'; ctx.fillText(r[1], colP1 + 28, y);
+    const w2 = ctx.measureText(r[2]).width + 14;
+    ctx.fillStyle = 'rgba(165,243,252,0.16)';
+    ctx.beginPath(); ctx.roundRect(colP2 + 28 - w2 / 2, y - 12, w2, 16, 4); ctx.fill();
+    ctx.fillStyle = '#a5f3fc'; ctx.fillText(r[2], colP2 + 28, y);
+  });
 }
 
 // ── FIGHT ───────────────────────────────────────────────────────
@@ -1149,6 +1184,18 @@ function drawFight(f) {
   }
 }
 
+function drawPause() {
+  ctx.fillStyle = 'rgba(4,0,14,0.72)'; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 56px monospace';
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 9; ctx.strokeText('PAUSED', W / 2, H / 2 - 30);
+  ctx.fillStyle = '#fb923c'; ctx.fillText('PAUSED', W / 2, H / 2 - 30);
+  ctx.font = 'bold 14px monospace'; ctx.fillStyle = '#fff';
+  ctx.fillText('START (ENTER / 2): RESUME', W / 2, H / 2 + 20);
+  ctx.fillText('BUTTON 2 (I / T): BACK TO MENU', W / 2, H / 2 + 44);
+  ctx.textAlign = 'left';
+}
+
 // ── WIN ─────────────────────────────────────────────────────────
 function drawWin() {
   ctx.fillStyle = '#04000e'; ctx.fillRect(0, 0, W, H);
@@ -1162,9 +1209,9 @@ function drawWin() {
   ctx.font = '16px monospace'; ctx.fillStyle = '#fff'; ctx.fillText(C.subtitle, W / 2, H / 2 - 50);
   ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#b00020';
   ctx.textAlign = 'left';
-  ctx.fillText('START / BUTTON 1: REMATCH', 16, H - 14);
+  ctx.fillText('START / BUTTON 1 (U / R): REMATCH', 16, H - 14);
   ctx.textAlign = 'right';
-  ctx.fillText('DOWN: SELECT', W - 16, H - 14);
+  ctx.fillText('BUTTON 2 (I / T): SELECT', W - 16, H - 14);
 }
 
 // ── INPUT ───────────────────────────────────────────────────────
@@ -1253,6 +1300,19 @@ function handleInput() {
   }
 
   if (sceneName === 'fight' && fight) {
+    if (consumePressed(['START1', 'START2'])) {
+      fight.paused = !fight.paused;
+      if (fight.paused) stopBattleAmb(); else startBattleAmb();
+    }
+    if (fight.paused) {
+      if (consumePressed(['P1_2', 'P2_2'])) {
+        stopBattleAmb();
+        sel.confirmed = [false, false]; sel.chosen = [-1, -1];
+        fight = null; sceneName = 'select';
+      }
+      drainPressed();
+      return;
+    }
     if (!fight.rOver) {
       const spd = 9, minD = 52;
       const mv = [
@@ -1287,7 +1347,7 @@ function handleInput() {
       fight = mkFight(winData.ci[0], winData.ci[1]);
       fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); startBattleAmb();
     }
-    if (consumePressed(['P1_D', 'P2_D'])) {
+    if (consumePressed(['P1_2', 'P2_2'])) {
       sel.confirmed = [false, false]; sel.chosen = [-1, -1]; sceneName = 'select';
     }
     drainPressed();
