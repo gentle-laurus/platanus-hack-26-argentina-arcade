@@ -1288,12 +1288,16 @@ function aiStep(f) {
   ai.L = ai.R = 0;
   const dx = opp.x - me.x, adx = Math.abs(dx), face = dx < 0 ? -1 : 1;
   const threat = opp.bullets.some(b => Math.abs(b.x - me.x) < 160);
-  if (threat && me.gnd) doJump(f, 1);
-  else if (opp.state === 'attack' && adx < 120) { if (face > 0) ai.L = 1; else ai.R = 1; }
-  else if (adx < 90 && me.cd <= 0) doScratch(f, 1);
-  else if (adx > 240 && me.cd <= 0 && Math.random() < 0.22) doSpecial(f, 1);
-  else if (adx > 70) { if (face > 0) ai.R = 1; else ai.L = 1; }
-  me.aiT = 0.13 + Math.random() * 0.07;
+  const punish = opp.state === 'hurt';
+  if (threat) doJump(f, 1);
+  else if (punish && adx < 140 && me.cd <= 0) doScratch(f, 1);
+  else if (punish) { if (face > 0) ai.R = 1; else ai.L = 1; }
+  else if (opp.state === 'attack' && adx < 130) { if (face > 0) ai.L = 1; else ai.R = 1; }
+  else if (adx < 60) { if (face > 0) ai.L = 1; else ai.R = 1; }
+  else if (adx < 110 && me.cd <= 0) doScratch(f, 1);
+  else if (adx > 130 && me.cd <= 0 && Math.random() < 0.35) doSpecial(f, 1);
+  else if (adx > 85) { if (face > 0) ai.R = 1; else ai.L = 1; }
+  me.aiT = 0.1 + Math.random() * 0.1;
 }
 
 function handleInput() {
