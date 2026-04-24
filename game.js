@@ -606,8 +606,15 @@ const CATS = [
       }
       ctx.globalAlpha = 1;
     },
-    bgDraw(T, a) { const h = ((T * 20 + 90) % 360).toFixed(0); ctx.globalAlpha = a; this._r(ctx, T, h); ctx.globalAlpha = 1; },
-    _r(o, T, h) {
+    bgDraw(T, a) {
+      const h = ((T * 20 + 90) % 360).toFixed(0);
+      if (!this._oc) { this._oc = document.createElement('canvas'); this._oc.width = W; this._oc.height = H; this._ot = -99; }
+      if (T - this._ot > 0.05 || T < this._ot) { this._ot = T; const o = this._oc.getContext('2d'); o.clearRect(0, 0, W, H); this._rStatic(o, h); }
+      ctx.globalAlpha = a; ctx.drawImage(this._oc, 0, 0);
+      this._rTrail(ctx, T, h);
+      ctx.globalAlpha = 1;
+    },
+    _rStatic(o, h) {
       const f1 = 2.01, f2 = 3.0, f3 = 2.5, p1 = 0.5, p2 = 1.3, decay = 0.0008;
       const cx = W / 2, cy = H / 2, amp = Math.min(W, H) * 0.46;
       for (let layer = 0; layer < 3; layer++) {
@@ -619,15 +626,20 @@ const CATS = [
           o.lineTo(cx + amp * Math.sin(f1 * t + p1) * d, cy + amp * Math.sin(f2 * t + p2) * Math.sin(f3 * t) * d);
         } o.stroke();
       }
+      o.globalAlpha = 1;
+    },
+    _rTrail(o, T, h) {
+      const f1 = 2.01, f2 = 3.0, f3 = 2.5, p1 = 0.5, p2 = 1.3, decay = 0.0008;
+      const cx = W / 2, cy = H / 2, amp = Math.min(W, H) * 0.46;
       const base = ((T * 0.5) % 1) * 1200;
       o.strokeStyle = `hsl(${h},100%,80%)`; o.globalAlpha = 0.85; o.lineWidth = 2.5;
       o.beginPath();
-      for (let i = Math.max(0, base - 60); i <= Math.min(1200, base); i++) {
+      const start = Math.max(0, base - 60), end = Math.min(1200, base);
+      for (let i = start; i <= end; i++) {
         const t = i / 1200 * 80, d = Math.exp(-decay * t);
         const x = cx + amp * Math.sin(f1 * t + p1) * d, y = cy + amp * Math.sin(f2 * t + p2) * Math.sin(f3 * t) * d;
-        i === Math.max(0, base - 60) ? o.moveTo(x, y) : o.lineTo(x, y);
+        i === start ? o.moveTo(x, y) : o.lineTo(x, y);
       } o.stroke();
-      o.globalAlpha = 1;
     } },
   { name: 'FIBS', subtitle: 'THE GOLDEN MENACE', css: '#10b981', syncFreq: 5, orbit: true,
     initProj(b) {
