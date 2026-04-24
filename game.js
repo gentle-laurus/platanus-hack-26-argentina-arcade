@@ -881,9 +881,9 @@ function drawSelect() {
   });
 
   if (sel.confirmed[0] && !sel.confirmed[1] && !sel.transitioning) {
-    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-    ctx.fillStyle = '#fbbf24'; ctx.globalAlpha = 0.65 + Math.sin(T * 4) * 0.3;
-    ctx.fillText('↵  PLAY VS CPU', W / 2, 408);
+    ctx.font = 'bold 18px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#fbbf24'; ctx.globalAlpha = 0.7 + Math.sin(T * 4) * 0.3;
+    ctx.fillText('PRESS START → PLAY VS CPU', W / 2, 410);
     ctx.globalAlpha = 1;
   }
   [0, 1].forEach(pi => {
