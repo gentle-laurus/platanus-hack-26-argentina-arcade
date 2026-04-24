@@ -950,7 +950,7 @@ function updateFight(f, dt) {
       }
       let d = Infinity;
       const wx = b.wellDx || 0, wy = b.wellDy || 0;
-      const cY = opp.crouch ? -12 : 20;
+      const cY = opp.crouch ? -15 : 0;
       const ox = opp.x - wx, oy = (opp.y - cY) - wy;
       if (C.orbit) {
         if (fi.state === 'dead') { fi.cd = 0.5; return false; }
@@ -1005,7 +1005,7 @@ function updateFight(f, dt) {
           b.wellDy = wy + (wdy / wd) * wp;
         }
       }
-      if (d < (opp.crouch ? (C.orbit ? 30 : 22) : (C.orbit ? 36 : 28)) && !b.hit && opp.invuln <= 0) {
+      if (d < (opp.crouch ? (C.orbit ? 38 : 30) : (C.orbit ? 52 : 46)) && !b.hit && opp.invuln <= 0) {
         b.hit = true; opp.hp = Math.max(0, opp.hp - b.dmg);
         opp.state = 'hurt'; opp.stateT = 0.22; opp.hurtT = 0.22; opp.vy = -5;
         sHit(); f.flash = 0.07;
