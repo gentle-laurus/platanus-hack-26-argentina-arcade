@@ -56,7 +56,7 @@ let fight = null;
 let winData = { winner: 0, ci: [0, 1] };
 let winEnterT = 0;
 const controls = { held: Object.create(null), pressed: Object.create(null) };
-const sel = { cursor: [0, 3], confirmed: [false, false], chosen: [-1, -1] };
+const sel = { cursor: [0, 3], confirmed: [false, false], chosen: [-1, -1], cpu: false };
 
 // ── AUDIO ──────────────────────────────────────────────────────
 let AC, MG;
@@ -870,9 +870,9 @@ function drawSelect() {
       ctx.fillStyle = '#000'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.fillText('P1', cx, cy - 76);
     }
     if (isConf1) {
-      ctx.fillStyle = '#a5f3fc'; ctx.globalAlpha = 0.95;
+      ctx.fillStyle = sel.cpu ? '#fbbf24' : '#a5f3fc'; ctx.globalAlpha = 0.95;
       ctx.beginPath(); ctx.roundRect(cx - 20, cy - 87, 40, 16, 4); ctx.fill();
-      ctx.fillStyle = '#000'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.fillText('P2', cx, cy - 76);
+      ctx.fillStyle = '#000'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.fillText(sel.cpu ? 'CPU' : 'P2', cx, cy - 76);
     }
     ctx.globalAlpha = 1;
     ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
@@ -880,6 +880,12 @@ function drawSelect() {
     ctx.fillText(isTaken ? '✗ TAKEN' : C.name, cx, cy + 76);
   });
 
+  if (sel.confirmed[0] && !sel.confirmed[1] && !sel.transitioning) {
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#fbbf24'; ctx.globalAlpha = 0.65 + Math.sin(T * 4) * 0.3;
+    ctx.fillText('↵  PLAY VS CPU', W / 2, 408);
+    ctx.globalAlpha = 1;
+  }
   [0, 1].forEach(pi => {
     const i = sel.cursor[pi], cx = sX + i * cW + cW / 2;
     const col = pi === 0 ? '#ff9de2' : '#a5f3fc';
@@ -936,13 +942,13 @@ function drawSelect() {
 }
 
 // ── FIGHT ───────────────────────────────────────────────────────
-function mkFight(ci1, ci2) {
+function mkF(x, d, w) {
+  return { x, y: FLOOR - 28, vy: 0, dir: d, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: w };
+}
+function mkFight(ci1, ci2, cpu) {
   return {
-    ci: [ci1, ci2],
-    F: [
-      { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: 0 },
-      { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: 0 },
-    ],
+    ci: [ci1, ci2], cpu: !!cpu,
+    F: [mkF(185, 1, 0), mkF(W - 185, -1, 0)],
     round: 1, over: false, rOver: false, _bc: 0,
     beatT: 0, beatMS: 475, beatF: 0,
     parts: [], flash: 0, msg: '', msgT: 0,
@@ -1101,16 +1107,13 @@ function endRound(f, winner) {
   if (f.rOver) return; f.rOver = true; f.F[winner].wins++;
   f.msg = CATS[f.ci[winner]].name + ' WINS!'; f.msgT = 999; sRiffRound();
   setTimeout(() => {
-    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice() }; sceneName = 'win'; winEnterT = T; drainPressed(); stopBattleAmb(); sRiffMatch(); }
+    if (f.F[winner].wins >= 2) { f.over = true; winData = { winner, ci: f.ci.slice(), cpu: f.cpu }; sceneName = 'win'; winEnterT = T; drainPressed(); stopBattleAmb(); sRiffMatch(); }
     else { f.round++; resetRound(f); drainPressed(); }
   }, 2200);
 }
 function resetRound(f) {
   const w = [f.F[0].wins, f.F[1].wins];
-  f.F = [
-    { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: w[0] },
-    { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: w[1] },
-  ];
+  f.F = [mkF(185, 1, w[0]), mkF(W - 185, -1, w[1])];
   f.rOver = false; f.parts = []; f.flash = 0; f.msg = 'ROUND ' + f.round; f.msgT = 1.2;
   f.suddenDeath = false; f.timer = 180; f.timeUp = false;
 }
@@ -1255,13 +1258,6 @@ function consumePressed(codes) {
   for (const c of codes) if (controls.pressed[c]) { controls.pressed[c] = false; return true; }
   return false;
 }
-function getHoriz(pi) {
-  let a = 0;
-  if (isHeld(pi === 0 ? 'P1_L' : 'P2_L')) a -= 1;
-  if (isHeld(pi === 0 ? 'P1_R' : 'P2_R')) a += 1;
-  return a;
-}
-
 function onKey(e, down) {
   if (down) initAudio();
   const k = normKey(e.key); if (!k) return;
@@ -1283,6 +1279,23 @@ function advanceCursor(pi, dir) {
   return next;
 }
 
+function aiStep(f) {
+  const me = f.F[1], opp = f.F[0];
+  me.aiT = Math.max(0, (me.aiT || 0) - 0.017);
+  const ai = f.ai || (f.ai = { L: 0, R: 0 });
+  if (me.state === 'dead') { ai.L = ai.R = 0; return; }
+  if (me.state === 'hurt' || me.aiT > 0) return;
+  ai.L = ai.R = 0;
+  const dx = opp.x - me.x, adx = Math.abs(dx), face = dx < 0 ? -1 : 1;
+  const threat = opp.bullets.some(b => Math.abs(b.x - me.x) < 160);
+  if (threat && me.gnd) doJump(f, 1);
+  else if (opp.state === 'attack' && adx < 120) { if (face > 0) ai.L = 1; else ai.R = 1; }
+  else if (adx < 90 && me.cd <= 0) doScratch(f, 1);
+  else if (adx > 240 && me.cd <= 0 && Math.random() < 0.22) doSpecial(f, 1);
+  else if (adx > 70) { if (face > 0) ai.R = 1; else ai.L = 1; }
+  me.aiT = 0.13 + Math.random() * 0.07;
+}
+
 function handleInput() {
   if (sceneName === 'select') {
     // P1 cursor
@@ -1298,6 +1311,14 @@ function handleInput() {
         else { sel.confirmed[0] = true; sel.chosen[0] = sel.cursor[0]; sConfirm(); sMeow(400); }
       }
     }
+    // CPU toggle: P1 confirmed, P2 hasn't → START1 assigns a random cat to P2 as CPU
+    if (sel.confirmed[0] && !sel.confirmed[1] && consumePressed(['START1'])) {
+      let r; do { r = (Math.random() * 4) | 0; } while (r === sel.chosen[0]);
+      sel.cursor[1] = r; sel.chosen[1] = r; sel.confirmed[1] = true; sel.cpu = true;
+      sConfirm(); sMeow(520);
+    }
+    // Any P2 input cancels CPU mode so a human can take over
+    if (sel.cpu) for (const k in controls.pressed) if (controls.pressed[k] && k[0] === 'P' && k[1] === '2') { sel.cpu = false; sel.confirmed[1] = false; sel.chosen[1] = -1; break; }
     // P2 cursor
     if (!sel.confirmed[1]) {
       if (consumePressed(['P2_L'])) { sel.cursor[1] = advanceCursor(1, -1); sSelect(); }
@@ -1316,13 +1337,13 @@ function handleInput() {
       // label/card is visible before the fight starts. `transitioning` guards
       // re-trigger without clearing the visual state mid-countdown.
       sel.transitioning = true;
-      const a = sel.chosen[0], b = sel.chosen[1];
+      const a = sel.chosen[0], b = sel.chosen[1], c = sel.cpu;
       setTimeout(() => {
-        fight = mkFight(a, b); fight.msg = 'ROUND 1'; fight.msgT = 1.2;
+        fight = mkFight(a, b, c); fight.msg = 'ROUND 1'; fight.msgT = 1.2;
         sceneName = 'fight'; sRound(); startBattleAmb();
         sel.confirmed[0] = sel.confirmed[1] = false;
         sel.chosen[0] = sel.chosen[1] = -1;
-        sel.transitioning = false;
+        sel.cpu = false; sel.transitioning = false;
       }, 650);
     }
     drainPressed();
@@ -1344,10 +1365,11 @@ function handleInput() {
       return;
     }
     if (!fight.rOver) {
-      const spd = 9, minD = 52;
+      if (fight.cpu) aiStep(fight);
+      const spd = 9, minD = 52, ai = fight.ai || { L: 0, R: 0 };
       const mv = [
         (isHeld('P1_R') ? spd : 0) - (isHeld('P1_L') ? spd : 0),
-        (isHeld('P2_R') ? spd : 0) - (isHeld('P2_L') ? spd : 0),
+        fight.cpu ? ((ai.R ? spd : 0) - (ai.L ? spd : 0)) : ((isHeld('P2_R') ? spd : 0) - (isHeld('P2_L') ? spd : 0)),
       ];
       for (let pi = 0; pi < 2; pi++) {
         const me = fight.F[pi], other = fight.F[1 - pi];
@@ -1363,9 +1385,11 @@ function handleInput() {
       if (consumePressed(['P1_U'])) doJump(fight, 0);
       if (consumePressed(['P1_1'])) doScratch(fight, 0);
       if (consumePressed(['P1_2'])) doSpecial(fight, 0);
-      if (consumePressed(['P2_U'])) doJump(fight, 1);
-      if (consumePressed(['P2_1'])) doScratch(fight, 1);
-      if (consumePressed(['P2_2'])) doSpecial(fight, 1);
+      if (!fight.cpu) {
+        if (consumePressed(['P2_U'])) doJump(fight, 1);
+        if (consumePressed(['P2_1'])) doScratch(fight, 1);
+        if (consumePressed(['P2_2'])) doSpecial(fight, 1);
+      }
     }
     drainPressed();
     return;
@@ -1374,7 +1398,7 @@ function handleInput() {
   if (sceneName === 'win') {
     if (T - winEnterT < 0.6) { drainPressed(); return; }
     if (consumePressed(['START1', 'START2', 'P1_1', 'P2_1'])) {
-      fight = mkFight(winData.ci[0], winData.ci[1]);
+      fight = mkFight(winData.ci[0], winData.ci[1], winData.cpu);
       fight.msg = 'ROUND 1'; fight.msgT = 1.2; sceneName = 'fight'; sRound(); startBattleAmb();
     }
     if (consumePressed(['P1_2', 'P2_2'])) {
