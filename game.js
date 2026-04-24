@@ -527,16 +527,17 @@ const CATS = [
       return { x: ox + dir * dist * age, y: oy + y };
     },
     drawProj(b) {
+      const wx = b.wellDx || 0, wy = b.wellDy || 0;
       ctx.strokeStyle = this.css; ctx.lineWidth = b.isPeak ? 3 : 2; ctx.globalAlpha = b.isPeak ? 0.55 : 0.4;
       ctx.beginPath();
-      for (let i = 0; i <= 60; i++) { const a = b.age * i / 60, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+      for (let i = 0; i <= 60; i++) { const a = b.age * i / 60, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x + wx, p.y + wy) : ctx.moveTo(p.x + wx, p.y + wy); }
       ctx.stroke();
       ctx.strokeStyle = b.isPeak ? '#fff' : this.css; ctx.lineWidth = b.isPeak ? 4.5 : 3.5; ctx.globalAlpha = 0.95;
       ctx.beginPath();
       const s = Math.max(0, b.age - 0.08);
-      for (let i = 0; i <= 12; i++) { const a = s + (b.age - s) * i / 12, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+      for (let i = 0; i <= 12; i++) { const a = s + (b.age - s) * i / 12, p = this.projPath(a, b.ox, b.oy, b.tx, b.ty, b); i ? ctx.lineTo(p.x + wx, p.y + wy) : ctx.moveTo(p.x + wx, p.y + wy); }
       ctx.stroke();
-      ctx.fillStyle = this.css; ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 13 : 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = this.css; ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(b.x + wx, b.y + wy, b.isPeak ? 13 : 9, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     },
     bgDraw(T, a) { const h = ((T * 20) % 360).toFixed(0); ctx.globalAlpha = a; this._r(ctx, T, h); ctx.globalAlpha = 1; },
@@ -555,12 +556,35 @@ const CATS = [
       for (let i = 0; i <= 150; i++) { const t = i / 150 * Math.PI * 2 * 3 + T * 0.12; o.lineTo(cx + W * 0.46 * Math.sin(aa * t + delta), cy + H * 0.38 * Math.sin(b * t)); }
       o.stroke(); o.globalAlpha = 1;
     } },
-  { name: 'GAUSSY', subtitle: 'THE MEAN ONE', css: '#fb923c', syncFreq: 2,
-    projPath(age, ox, oy, tx, ty) {
-      const dx = tx - ox, dy = ty - oy, len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const px = -dy / len, py = dx / len;
-      const osc = Math.sin(2.01 * age * 30) * Math.exp(-0.003 * age * 30) * 42;
-      return { x: ox + dx * age + px * osc, y: oy + dy * age + py * osc };
+  { name: 'GAUSSY', subtitle: 'THE MEAN ONE', css: '#fb923c', syncFreq: 2, well: true,
+    drawProj(b) {
+      if (b.phase === 'flying') {
+        const tr = b.trail;
+        if (tr && tr.length > 1) {
+          ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 2;
+          for (let i = 1; i < tr.length; i++) { ctx.globalAlpha = (i / tr.length) * 0.5; ctx.beginPath(); ctx.moveTo(tr[i - 1].x, tr[i - 1].y); ctx.lineTo(tr[i].x, tr[i].y); ctx.stroke(); }
+        }
+        ctx.fillStyle = '#a855f7'; ctx.globalAlpha = 0.95;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c084fc'; ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 14, 0, Math.PI * 2); ctx.fill();
+      } else {
+        const t = b.anchoredT || 0, pulse = 0.7 + 0.3 * Math.sin(T * 10);
+        for (let ring = 4; ring >= 1; ring--) {
+          ctx.strokeStyle = '#a855f7'; ctx.globalAlpha = 0.12 * ring * pulse; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(b.x, b.y, 180 * ring / 4, 0, Math.PI * 2); ctx.stroke();
+        }
+        for (let i = 0; i < 8; i++) {
+          const a = T * 3 + i * Math.PI / 4, r = 40 + 140 * ((T * 0.4 + i * 0.12) % 1);
+          ctx.fillStyle = '#c084fc'; ctx.globalAlpha = 0.6 * (1 - (r - 40) / 140);
+          ctx.beginPath(); ctx.arc(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = '#1a0a2e'; ctx.globalAlpha = 0.85;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 28, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#a855f7'; ctx.globalAlpha = 0.9; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 28, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     },
     bgDraw(T, a) { const h = ((T * 20 + 90) % 360).toFixed(0); ctx.globalAlpha = a; this._r(ctx, T, h); ctx.globalAlpha = 1; },
     _r(o, T, h) {
@@ -594,6 +618,7 @@ const CATS = [
       b.orbitT = 0; b.phase = 'orbit'; b.trail = [];
     },
     drawProj(b) {
+      const wx = b.wellDx || 0, wy = b.wellDy || 0;
       const tr = b.trail;
       if (tr && tr.length > 1) {
         ctx.strokeStyle = this.css; ctx.lineWidth = b.isPeak ? 3 : 2.2;
@@ -602,10 +627,11 @@ const CATS = [
           ctx.beginPath(); ctx.moveTo(tr[i - 1].x, tr[i - 1].y); ctx.lineTo(tr[i].x, tr[i].y); ctx.stroke();
         }
       }
+      const bx = b.x + wx, by = b.y + wy;
       ctx.fillStyle = b.isPeak ? '#fff' : this.css; ctx.globalAlpha = 0.95;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 9 : 7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(bx, by, b.isPeak ? 9 : 7, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = this.css; ctx.globalAlpha = 0.3;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.isPeak ? 16 : 12, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(bx, by, b.isPeak ? 16 : 12, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     },
     bgDraw(T, a) {
@@ -890,8 +916,23 @@ function updateFight(f, dt) {
     if (fi.y >= FLOOR - 28) { fi.y = FLOOR - 28; fi.vy = 0; fi.gnd = true; fi.jumps = 0; } else fi.gnd = false;
     fi.x = Math.max(40, Math.min(W - 40, fi.x));
     if (fi.state !== 'dead') fi.dir = fi.x < opp.x ? 1 : -1;
+    const oppC = CATS[f.ci[1 - pi]];
+    const oppWell = oppC.well ? opp.bullets.find(bb => bb.phase === 'anchored') : null;
     fi.bullets = fi.bullets.filter(b => {
+      if (C.well) {
+        if (b.phase === 'flying') {
+          b.x += b.vx;
+          if (b.x < -40 || b.x > W + 40) { fi.cd = 0.8; return false; }
+        } else {
+          b.anchoredT -= dt;
+          if (b.anchoredT <= 0) { fi.cd = 0.8; return false; }
+        }
+        b.trail = b.trail || []; b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 10) b.trail.shift();
+        return true;
+      }
       let d = Infinity;
+      const wx = b.wellDx || 0, wy = b.wellDy || 0;
+      const ox = opp.x - wx, oy = (opp.y - 20) - wy;
       if (C.orbit) {
         if (fi.state === 'dead') { fi.cd = 0.5; return false; }
         if (b.phase === 'orbit') {
@@ -908,7 +949,7 @@ function updateFight(f, dt) {
               const rS = b.r0 + (b.rMax - b.r0) * (tS / 2);
               const aS = b.ph0 + b.omega * tS;
               const xS = fi.x + Math.cos(aS) * rS, yS = (fi.y - 20) + Math.sin(aS) * rS;
-              const sd = Math.sqrt((xS - opp.x) ** 2 + (yS - (opp.y - 20)) ** 2);
+              const sd = Math.sqrt((xS - ox) ** 2 + (yS - oy) ** 2);
               if (sd < d) d = sd;
             }
           }
@@ -919,12 +960,12 @@ function updateFight(f, dt) {
           if (!b.hit) {
             for (let s = 1; s <= 4; s++) {
               const xS = px + (b.x - px) * s / 4, yS = py + (b.y - py) * s / 4;
-              const sd = Math.sqrt((xS - opp.x) ** 2 + (yS - (opp.y - 20)) ** 2);
+              const sd = Math.sqrt((xS - ox) ** 2 + (yS - oy) ** 2);
               if (sd < d) d = sd;
             }
           }
         }
-        b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 14) b.trail.shift();
+        b.trail.push({ x: b.x + wx, y: b.y + wy }); if (b.trail.length > 14) b.trail.shift();
       } else {
         const prev = b.age; b.age += dt * b.spd; if (b.age >= 1) return false;
         const p = C.projPath(b.age, b.ox, b.oy, b.tx, b.ty, b); b.x = p.x; b.y = p.y;
@@ -932,9 +973,17 @@ function updateFight(f, dt) {
           for (let s = 1; s <= 6; s++) {
             const ta = prev + (b.age - prev) * s / 6;
             const sp = C.projPath(ta, b.ox, b.oy, b.tx, b.ty, b);
-            const sd = Math.sqrt((sp.x - opp.x) ** 2 + (sp.y - (opp.y - 20)) ** 2);
+            const sd = Math.sqrt((sp.x - ox) ** 2 + (sp.y - oy) ** 2);
             if (sd < d) d = sd;
           }
+        }
+      }
+      if (oppWell) {
+        const wdx = oppWell.x - (b.x + wx), wdy = oppWell.y - (b.y + wy), wd = Math.sqrt(wdx * wdx + wdy * wdy);
+        if (wd < 180 && wd > 0.5) {
+          const wp = (1 - wd / 180) * 2.8 * dt * 60;
+          b.wellDx = wx + (wdx / wd) * wp;
+          b.wellDy = wy + (wdy / wd) * wp;
         }
       }
       if (d < (C.orbit ? 36 : 28) && !b.hit && opp.invuln <= 0) {
@@ -950,6 +999,21 @@ function updateFight(f, dt) {
     });
   });
   const F = f.F;
+  F.forEach((fi, pi) => {
+    const C = CATS[f.ci[pi]];
+    if (!C.well) { fi.captured = false; return; }
+    const w = fi.bullets.find(b => b.phase === 'anchored');
+    const op = F[1 - pi];
+    if (!w) { op.captured = false; return; }
+    const dx = w.x - op.x, dy = w.y - (op.y - 20), dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 180 && dist > 0.5) {
+      const pull = (1 - dist / 180) * 3 * dt * 60;
+      op.x += (dx / dist) * pull;
+      op.y += (dy / dist) * pull;
+    }
+    if (dist < 40) { op.cd = Math.max(op.cd, 0.5); op.captured = true; }
+    else op.captured = false;
+  });
   if (F[0].state !== 'dead' && F[1].state !== 'dead') {
     const dx = F[1].x - F[0].x, minD = 52;
     if (Math.abs(dx) < minD) {
@@ -1210,8 +1274,20 @@ function drainPressed() { for (const k in controls.pressed) controls.pressed[k] 
 
 function doSpecial(f, pi) {
   const fi = f.F[pi], opp = f.F[1 - pi];
-  if (fi.state === 'dead' || fi.state === 'hurt') return;
+  if (fi.state === 'dead' || fi.state === 'hurt' || fi.captured) return;
   const C = CATS[f.ci[pi]];
+  if (C.well) {
+    const flying = fi.bullets.find(b => b.phase === 'flying');
+    if (flying) {
+      flying.phase = 'anchored'; flying.anchoredT = 3;
+      fi.state = 'attack'; fi.stateT = 0.16; tone(180 + pi * 40, 'sine', 0.06, 0.25, 40);
+      return;
+    }
+    if (fi.bullets.length > 0 || fi.cd > 0) return;
+    fi.state = 'attack'; fi.stateT = 0.16; sShoot(200 + pi * 120);
+    fi.bullets.push({ x: fi.x + fi.dir * 20, y: fi.y - 20, vx: fi.dir * 5, phase: 'flying', dmg: 0, hit: false, trail: [] });
+    return;
+  }
   if (C.teleport) {
     if (fi.cd > 0) return;
     for (let i = 0; i < 14; i++) { const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 3; f.parts.push({ x: fi.x, y: fi.y - 20, vx: Math.cos(a) * v, vy: Math.sin(a) * v, col: C.css, life: 0.5, r: 3 }); }
