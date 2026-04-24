@@ -892,8 +892,8 @@ function mkFight(ci1, ci2) {
   return {
     ci: [ci1, ci2],
     F: [
-      { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: 0 },
-      { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: 0 },
+      { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: 0 },
+      { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: 0 },
     ],
     round: 1, over: false, rOver: false, _bc: 0,
     beatT: 0, beatMS: 475, beatF: 0,
@@ -950,7 +950,8 @@ function updateFight(f, dt) {
       }
       let d = Infinity;
       const wx = b.wellDx || 0, wy = b.wellDy || 0;
-      const ox = opp.x - wx, oy = (opp.y - 20) - wy;
+      const cY = opp.crouch ? -12 : 20;
+      const ox = opp.x - wx, oy = (opp.y - cY) - wy;
       if (C.orbit) {
         if (fi.state === 'dead') { fi.cd = 0.5; return false; }
         if (b.phase === 'orbit') {
@@ -1004,7 +1005,7 @@ function updateFight(f, dt) {
           b.wellDy = wy + (wdy / wd) * wp;
         }
       }
-      if (d < (C.orbit ? 36 : 28) && !b.hit && opp.invuln <= 0) {
+      if (d < (opp.crouch ? (C.orbit ? 30 : 22) : (C.orbit ? 36 : 28)) && !b.hit && opp.invuln <= 0) {
         b.hit = true; opp.hp = Math.max(0, opp.hp - b.dmg);
         opp.state = 'hurt'; opp.stateT = 0.22; opp.hurtT = 0.22; opp.vy = -5;
         sHit(); f.flash = 0.07;
@@ -1053,8 +1054,8 @@ function endRound(f, winner) {
 function resetRound(f) {
   const w = [f.F[0].wins, f.F[1].wins];
   f.F = [
-    { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: w[0] },
-    { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, wins: w[1] },
+    { x: 185, y: FLOOR - 28, vy: 0, dir: 1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: w[0] },
+    { x: W - 185, y: FLOOR - 28, vy: 0, dir: -1, hp: 100, maxHp: 100, state: 'idle', stateT: 0, phase: 0, sync: 0, gnd: true, jumps: 0, bullets: [], cd: 0, hurtT: 0, invuln: 0, dashT: 0, dashVx: 0, crouch: false, wins: w[1] },
   ];
   f.rOver = false; f.parts = []; f.flash = 0; f.msg = 'ROUND ' + f.round; f.msgT = 1.2;
   f.suddenDeath = false; f.timer = 180; f.timeUp = false;
@@ -1068,7 +1069,9 @@ function drawFight(f) {
   F.forEach((fi, pi) => {
     if (fi.state === 'dead' && fi.y > H + 80) return;
     if (fi.invuln > 0) ctx.globalAlpha = 0.35 + 0.45 * Math.abs(Math.sin(T * 40));
+    if (fi.crouch) { const fy = fi.y + 42; ctx.save(); ctx.translate(fi.x, fy); ctx.scale(1, 0.45); ctx.translate(-fi.x, -fy); }
     drawCat(fi.x, fi.y, fi.dir, f.ci[pi], T, fi.state, fi.hurtT, 1, fi.sync);
+    if (fi.crouch) ctx.restore();
     ctx.globalAlpha = 1;
   });
   F.forEach((fi, pi) => {
@@ -1256,7 +1259,8 @@ function handleInput() {
       ];
       for (let pi = 0; pi < 2; pi++) {
         const me = fight.F[pi], other = fight.F[1 - pi];
-        const dx = me.dashT > 0 ? me.dashVx : mv[pi];
+        me.crouch = isHeld(pi === 0 ? 'P1_D' : 'P2_D') && me.gnd && me.state !== 'dead' && me.state !== 'hurt' && me.state !== 'attack' && me.dashT <= 0;
+        const dx = me.dashT > 0 ? me.dashVx : (me.crouch ? 0 : mv[pi]);
         if (!dx) continue;
         me.x += dx;
         if (me.state !== 'dead' && other.state !== 'dead') {
