@@ -331,15 +331,16 @@ function drawGauss(T, state, hurtT) {
   ctx.beginPath(); ctx.moveTo(-28, 15 + bob); ctx.bezierCurveTo(-50, 10 + bob, -52, -5, -44, -8); ctx.stroke();
   ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.arc(-44, -8, 6, 0, Math.PI * 2); ctx.fill();
   if (state === 'attack') pawDraw(38, -2, '#fb923c', 'rgba(251,146,60,0.2)', '#fed7aa', 'σ', 'bold 10px monospace', 58, -20, al);
-  const headR = 32 * (1 + breathe * 0.15);
+  const headW = 30 * (1 + breathe * 0.15), headH = 28 * (1 + breathe * 0.1);
+  const headY = -30 + bob * 0.4;
   ctx.fillStyle = '#fb923c'; ctx.globalAlpha = al;
-  ctx.beginPath(); ctx.arc(0, -30 + bob * 0.4, headR, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-22, -54 + bob * 0.3); ctx.lineTo(-28, -78 + bob * 0.3); ctx.lineTo(-8, -60 + bob * 0.3); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(22, -54 + bob * 0.3); ctx.lineTo(28, -78 + bob * 0.3); ctx.lineTo(8, -60 + bob * 0.3); ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#ea580c';
-  ctx.beginPath(); ctx.arc(-28, -54 + bob * 0.3, 11, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(28, -54 + bob * 0.3, 11, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#fed7aa';
-  ctx.beginPath(); ctx.arc(-28, -54 + bob * 0.3, 6, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(28, -54 + bob * 0.3, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-20, -56 + bob * 0.3); ctx.lineTo(-25, -73 + bob * 0.3); ctx.lineTo(-12, -61 + bob * 0.3); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(20, -56 + bob * 0.3); ctx.lineTo(25, -73 + bob * 0.3); ctx.lineTo(12, -61 + bob * 0.3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#fb923c';
+  ctx.beginPath(); ctx.ellipse(0, headY, headW, headH, 0, 0, Math.PI * 2); ctx.fill();
   const eyeY = -28 + bob * 0.4;
   ctx.strokeStyle = '#431407'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.globalAlpha = al;
   ctx.beginPath(); ctx.arc(-13, eyeY, 7, -Math.PI * 0.9, -Math.PI * 0.1); ctx.stroke();
@@ -1025,8 +1026,8 @@ function updateFight(f, dt) {
     const op = F[1 - pi];
     if (!w) { op.captured = false; return; }
     const dx = w.x - op.x, dy = w.y - (op.y - 20), dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 180 && dist > 0.5) {
-      const pull = (1 - dist / 180) * 3 * dt * 60;
+    if (dist < 220 && dist > 0.5) {
+      const pull = (1 - dist / 220) * 6.5 * dt * 60;
       op.x += (dx / dist) * pull;
       op.y += (dy / dist) * pull;
     }
@@ -1141,9 +1142,10 @@ function drawFight(f) {
   if (f.msgT > 0) {
     ctx.globalAlpha = Math.min(f.msgT, 0.4) / 0.4;
     ctx.font = 'bold 46px monospace'; ctx.textAlign = 'center';
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 8; ctx.strokeText(f.msg, W / 2, H / 2 - 20);
+    const msgY = f.msg.includes('SUDDEN') ? H / 2 + 40 : H / 2 - 20;
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 8; ctx.strokeText(f.msg, W / 2, msgY);
     ctx.fillStyle = f.msg.includes('PEAK') ? '#fff' : '#b00020';
-    ctx.fillText(f.msg, W / 2, H / 2 - 20); ctx.globalAlpha = 1;
+    ctx.fillText(f.msg, W / 2, msgY); ctx.globalAlpha = 1;
   }
 }
 
@@ -1252,7 +1254,7 @@ function handleInput() {
 
   if (sceneName === 'fight' && fight) {
     if (!fight.rOver) {
-      const spd = 5, minD = 52;
+      const spd = 9, minD = 52;
       const mv = [
         (isHeld('P1_R') ? spd : 0) - (isHeld('P1_L') ? spd : 0),
         (isHeld('P2_R') ? spd : 0) - (isHeld('P2_L') ? spd : 0),
@@ -1317,7 +1319,7 @@ function doSpecial(f, pi) {
     const minX = crossLeft ? 45 : Math.min(W - 65, opp.x + 80);
     const maxX = crossLeft ? Math.max(minX + 20, opp.x - 80) : W - 45;
     fi.x = minX + Math.random() * (maxX - minX);
-    fi.y = 50 + Math.random() * (H / 2 - 50);
+    fi.y = Math.max(50, opp.y - 140 - Math.random() * 40);
     fi.vy = 0; fi.jumps = 0; fi.gnd = false;
     fi.invuln = 0.25; fi.cd = 0.65;
     fi.dashT = 0.5; fi.dashVx = opp.x > fi.x ? 6 : -6;
@@ -1351,7 +1353,7 @@ function doSpecial(f, pi) {
 function doScratch(f, pi) {
   const fi = f.F[pi], opp = f.F[1 - pi];
   if (fi.cd > 0 || fi.state === 'dead' || fi.state === 'hurt') return;
-  fi.cd = 0.18; fi.state = 'attack'; fi.stateT = 0.14;
+  fi.cd = 0.1; fi.state = 'attack'; fi.stateT = 0.16;
   tone(620 + pi * 40, 'square', 0.04, 0.09, 920);
   if (Math.abs(opp.x - fi.x) < 85 && Math.abs(opp.y - fi.y) < 55 && opp.state !== 'dead' && opp.invuln <= 0) {
     opp.hp = Math.max(0, opp.hp - 5);
