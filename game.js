@@ -569,20 +569,38 @@ const CATS = [
         ctx.fillStyle = '#c084fc'; ctx.globalAlpha = 0.35;
         ctx.beginPath(); ctx.arc(b.x, b.y, 14, 0, Math.PI * 2); ctx.fill();
       } else {
-        const t = b.anchoredT || 0, pulse = 0.7 + 0.3 * Math.sin(T * 10);
-        for (let ring = 4; ring >= 1; ring--) {
-          ctx.strokeStyle = '#a855f7'; ctx.globalAlpha = 0.12 * ring * pulse; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.arc(b.x, b.y, 180 * ring / 4, 0, Math.PI * 2); ctx.stroke();
+        const age = 3 - (b.anchoredT || 0), life = (b.anchoredT || 0) / 3;
+        if (age < 0.45) {
+          const p = age / 0.45;
+          ctx.strokeStyle = '#fff'; ctx.globalAlpha = (1 - p) * 0.65; ctx.lineWidth = 3 * (1 - p);
+          ctx.beginPath(); ctx.arc(b.x, b.y, 30 + p * 160, 0, Math.PI * 2); ctx.stroke();
         }
-        for (let i = 0; i < 8; i++) {
-          const a = T * 3 + i * Math.PI / 4, r = 40 + 140 * ((T * 0.4 + i * 0.12) % 1);
-          ctx.fillStyle = '#c084fc'; ctx.globalAlpha = 0.6 * (1 - (r - 40) / 140);
-          ctx.beginPath(); ctx.arc(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r, 2.5, 0, Math.PI * 2); ctx.fill();
+        const grad = ctx.createRadialGradient(b.x, b.y, 30, b.x, b.y, 180);
+        grad.addColorStop(0, 'rgba(168,85,247,0.42)'); grad.addColorStop(0.55, 'rgba(168,85,247,0.14)'); grad.addColorStop(1, 'rgba(168,85,247,0)');
+        ctx.fillStyle = grad; ctx.globalAlpha = life;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 180, 0, Math.PI * 2); ctx.fill();
+        for (let arm = 0; arm < 3; arm++) {
+          ctx.strokeStyle = '#c084fc'; ctx.globalAlpha = 0.5 * life; ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          for (let i = 0; i <= 50; i++) {
+            const pp = i / 50, rr = 34 + pp * 130, ang = arm * Math.PI * 2 / 3 + T * 2.5 + pp * Math.PI * 3;
+            const x = b.x + Math.cos(ang) * rr, y = b.y + Math.sin(ang) * rr;
+            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+          }
+          ctx.stroke();
         }
-        ctx.fillStyle = '#1a0a2e'; ctx.globalAlpha = 0.85;
+        for (let i = 0; i < 14; i++) {
+          const ph = (T * 0.45 + i * 0.13) % 1, rr = 170 * (1 - ph), ang = T * 2.2 + i * 0.7 + ph * Math.PI * 3;
+          ctx.fillStyle = '#e9d5ff'; ctx.globalAlpha = Math.min(1, ph * 3) * (1 - ph * 0.55) * life;
+          ctx.beginPath(); ctx.arc(b.x + Math.cos(ang) * rr, b.y + Math.sin(ang) * rr, 2.2 + ph * 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+        const pulse = 0.8 + 0.2 * Math.sin(T * 12);
+        ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.85 * life * pulse; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 30, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#a855f7'; ctx.globalAlpha = 0.9 * life; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 34, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#000'; ctx.globalAlpha = 0.95 * life;
         ctx.beginPath(); ctx.arc(b.x, b.y, 28, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#a855f7'; ctx.globalAlpha = 0.9; ctx.lineWidth = 2.5;
-        ctx.beginPath(); ctx.arc(b.x, b.y, 28, 0, Math.PI * 2); ctx.stroke();
       }
       ctx.globalAlpha = 1;
     },
